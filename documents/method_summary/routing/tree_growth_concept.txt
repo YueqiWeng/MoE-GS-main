@@ -1,0 +1,176 @@
+# Dynamic tree growth — top-to-bottom (all cases)
+
+Root at TOP, growth flows DOWN.
+Legend:  ○ = leaf expert     ◆ = router (internal node)
+
+Code defaults (train_method.sh):
+  • max 2 HEADS can grow at the same grow check  (opacity / cov / color)
+  • max 1 LEAF split per head per check          (raise max_grows for more)
+  • sub-experts CAN split again if depth < max_depth (moe_tree_depth=3)
+  • grow_factor=2 → each split adds 2 child leaves (+1 net leaf count)
+
+
+================================================================================
+CASE 1 — Single split (simplest)
+================================================================================
+
+                              root
+                               │
+    ┌──────┬──────┬──────┬─────┼─────┬──────┬──────┐
+   L0     L1     L2     L3    L4    L5     L6     L7
+    ○      ○      ○      ○     ○     ○      ◆      ○
+                                              │
+                                       ┌──────┴──────┐
+                                      L6a           L6b
+                                       ○             ○
+
+  One head, one leaf, one grow check → 8 leaves become 9.
+
+
+================================================================================
+CASE 2 — YES: multiple HEADS grow together (same iteration, different trees)
+================================================================================
+
+  At iter 6000 (kitchen, real log):  color splits L6  AND  opacity splits L0
+  (Two separate top-down trees — not the same tree.)
+
+  color head                         opacity head
+       root                               root
+        │                                  │
+   … L6 ◆ … L7                        L0 ◆ … L7
+        │                                  │
+   ┌────┴────┐                        ┌────┴────┐
+  L6a ○  L6b ○                       L0a ○  L0b ○
+
+  cov head at same iter: often unchanged (no split that step).
+
+  Timeline (same grow check, different heads):
+
+        iter 6000  ──►  color:   L6  → ◆ + 2 children below
+                    ──►  opacity: L0  → ◆ + 2 children below
+                    ──►  cov:     (no split)
+
+  Limit: tree_grow_max_heads_per_event = 2  (at most 2 heads per check).
+
+
+================================================================================
+CASE 3 — YES: sub-experts grow (child leaves split again downward)
+================================================================================
+
+  Real kitchen color head history:  L6_7 → L0_1 → L0_1_c1_13  (3 grows)
+
+  Step A — split top-level leaf L6:
+
+                              root
+                               │
+              …    L6 ◆    …
+                    │
+               ┌────┴────┐
+              L6a ○    L6b ○
+
+  Step B — later, split another top-level leaf L0:
+
+                              root
+                               │
+         L0 ◆    …    L6 ◆    …
+          │
+     ┌────┴────┐
+    L0a ○    L0b ○
+                    │
+               ┌────┴────┐
+              L6a ○    L6b ○
+
+  Step C — sub-expert grow: split CHILD L0b (was created in step B):
+
+                              root
+                               │
+         L0 ◆    …    L6 ◆    …
+          │
+     ┌────┴────┐
+    L0a ○    L0b ◆          ◄── sub-expert (depth-2 leaf) splits downward
+                │
+           ┌────┴────┐
+          L0b1 ○   L0b2 ○
+
+  Rule: leaf can split only if  depth < moe_tree_depth (default 3).
+        depth-1 leaves (L0…L7) ✓    depth-2 children (L0a, L0b) ✓
+        depth-3 grandchildren ✗ (max depth reached)
+
+
+================================================================================
+CASE 4 — Same head, multiple leaves in ONE check (optional, default OFF)
+================================================================================
+
+  Default: tree_grow_max_per_event = 1  → only ONE leaf per head per check.
+
+  If set to 2, same head at same iter can split two leaves:
+
+                              root
+                               │
+         L0 ◆         L3 ◆         L6 ○         L7 ○
+          │             │
+     ┌────┴────┐   ┌────┴────┐
+    L0a ○  L0b ○ L3a ○  L3b ○
+
+  (+2 net leaves in one event on this head)
+
+
+================================================================================
+CASE 5 — Full evolution (one head, top → bottom, all cases combined)
+================================================================================
+
+  t=0  warm-start                    t=6k  2 heads grow*
+  8 leaves                         color:L6 + opacity:L0
+
+       root                              root (color)          root (opacity)
+        │                                │                     │
+    L0…L7 all ○                      … L6◆ …               L0◆ …
+                                       ├─L6a,L6b             ├─L0a,L0b
+
+  t=10k  sub-level split             t=18k  sub-expert split
+
+       root                              root
+        │                                │
+    L0◆ … L6◆ …                      L0◆ … L6◆ …
+     ├─L0a,L0b                         ├─L0a, L0b◆
+                                        │      ├─L0b1,L0b2
+     … L6◆ …                            … L6◆ …
+      ├─L6a,L6b                          ├─L6a,L6b
+
+  * same calendar time, different heads = CASE 2
+  * L0b splits again downward          = CASE 3
+
+
+================================================================================
+Quick answers
+================================================================================
+
+  Q: Can multi-expert grow together?
+  A: YES —
+     • up to 2 MLP heads at the same grow check (CASE 2);
+     • within one head, default is 1 leaf per check (CASE 1), optional 2+ (CASE 4).
+
+  Q: Can sub-expert grow?
+  A: YES — any leaf below root can split again downward until depth cap (CASE 3).
+     Kitchen example: L0_1_c1_13 (child of L0_1) splits at iter 18k.
+
+  Q: Does root split into 2 scene groups?
+  A: NO — root keeps 8 top slots; growth is local under one branch at a time.
+
+
+================================================================================
+Paper caption (short)
+================================================================================
+
+  Top-down dynamic tree: the root routes over eight initial leaves. At each
+  scheduled grow check, up to two heads may each split one overloaded leaf
+  into a router and two child experts; child leaves may split again until
+  a depth limit. Heads evolve independently.
+
+
+================================================================================
+Files
+================================================================================
+
+  tree_growth_txt/     real per-run trees from routing_analysis.json
+  tree_growth_concept.png   PNG panels

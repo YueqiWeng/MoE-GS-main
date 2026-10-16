@@ -1,0 +1,16 @@
+scene,method,train_min,peak_gpu_gb,reserved_gpu_gb,peak_cpu_rss_gb,params_m,param_mb,anchors,ckpt_disk_mb,run
+mipnerf360/kitchen,baseline,25.8,6.124,6.504,1.245,26.536,101.2,349062,105.2,outputs/mipnerf360/kitchen/baseline/2026-08-14_06:46:28
+mipnerf360/kitchen,moe,49.5,6.765,8.164,1.492,26.699,101.8,350544,105.9,outputs/mipnerf360/kitchen/moe/2026-08-14_07:12:20
+mipnerf360/kitchen,moe_tree,58.4,6.381,7.4,1.628,26.717,101.9,350544,106.0,outputs/mipnerf360/kitchen/moe_tree/2026-08-14_08:01:54
+mipnerf360/bicycle,baseline,22.8,4.879,5.752,1.628,73.348,279.8,965005,290.9,outputs/mipnerf360/bicycle/baseline/2026-08-13_23:01:34
+mipnerf360/bicycle,moe,38.9,5.542,8.201,1.583,65.682,250.6,863477,260.5,outputs/mipnerf360/bicycle/moe/2026-08-13_23:24:27
+mipnerf360/bicycle,moe_tree,57.8,5.044,6.783,1.582,65.7,250.6,863477,260.6,outputs/mipnerf360/bicycle/moe_tree/2026-08-14_00:03:23
+tandt/truck,baseline,10.0,1.962,2.129,1.63,25.316,96.6,333006,100.4,outputs/tandt/truck/baseline/2026-08-14_12:41:35
+tandt/truck,moe,21.6,2.361,2.895,1.635,24.669,94.1,323838,97.8,outputs/tandt/truck/moe/2026-08-14_12:51:35
+tandt/truck,moe_tree,28.2,2.033,3.148,1.635,24.687,94.2,323838,97.9,outputs/tandt/truck/moe_tree/2026-08-14_13:13:16
+nerfsynthetic/lego,baseline,4.7,2.353,3.154,1.85,5.138,19.6,67507,20.4,outputs/nerfsynthetic/lego/baseline/2026-08-14_17:38:15
+nerfsynthetic/lego,moe,13.1,2.525,3.471,1.819,4.803,18.3,62437,19.1,outputs/nerfsynthetic/lego/moe/2026-08-14_17:43:00
+nerfsynthetic/lego,moe_tree,18.8,2.435,3.453,1.847,4.821,18.4,62437,19.2,outputs/nerfsynthetic/lego/moe_tree/2026-08-14_17:56:10
+db/playroom,baseline,12.5,2.889,3.441,1.599,14.396,54.9,189328,57.1,outputs/db/playroom/baseline/2026-08-14_14:37:41
+db/playroom,moe,16.6,2.99,3.693,1.599,12.615,48.1,165236,50.1,outputs/db/playroom/moe/2026-08-14_14:50:11
+db/playroom,moe_tree,21.9,3.008,3.709,1.595,12.634,48.2,165236,50.2,outputs/db/playroom/moe_tree/2026-08-14_15:06:48

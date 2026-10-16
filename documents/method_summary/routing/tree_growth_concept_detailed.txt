@@ -1,0 +1,179 @@
+# Dynamic tree growth — detailed figures (no omitted branches)
+
+Every figure lists ALL 8 top-level slots under root.
+o = leaf expert    R = router    Split flows TOP -> DOWN
+
+(A) Start — 8 leaves under root (flat MoE warm-start)
+=====================================================
+
+
+                              root
+                               |
+       +-------+-------+-------+-------+-------+-------+-------+-------+
+       |       |       |       |       |       |       |       |       |
+      L0      L1      L2      L3      L4      L5      L6      L7
+       o       o       o       o       o       o       o       o
+
+  root
+  +-- L0  (leaf expert)
+  +-- L1  (leaf expert)
+  +-- L2  (leaf expert)
+  +-- L3  (leaf expert)
+  +-- L4  (leaf expert)
+  +-- L5  (leaf expert)
+  +-- L6  (leaf expert)
+  +-- L7  (leaf expert)
+
+
+(B) One grow — L6 splits downward; L0-L5, L7 unchanged
+======================================================
+
+
+                              root
+                               |
+       +-------+-------+-------+-------+-------+-------+-------+-------+
+       |       |       |       |       |       |       |       |       |
+      L0      L1      L2      L3      L4      L5      L6      L7
+       o       o       o       o       o       o       R       o
+                                                       |
+                                                  +----+----+
+                                                  |         |
+                                                 L6a       L6b
+                                                  o         o
+
+  root
+  +-- L0  (leaf)
+  +-- L1  (leaf)
+  +-- L2  (leaf)
+  +-- L3  (leaf)
+  +-- L4  (leaf)
+  +-- L5  (leaf)
+  +-- L6  (router)  <-- split this step
+  |   +-- L6a (leaf)
+  |   +-- L6b (leaf)
+  +-- L7  (leaf)
+
+  8 leaves -> 9 leaves
+
+
+(C) Two top-level splits — L0 and L6 both expanded
+==================================================
+
+
+                              root
+                               |
+       +-------+-------+-------+-------+-------+-------+-------+-------+
+       |       |       |       |       |       |       |       |       |
+      L0      L1      L2      L3      L4      L5      L6      L7
+       R       o       o       o       o       o       R       o
+       |                                       |
+  +----+----+                             +----+----+
+  |         |                             |         |
+ L0a       L0b                           L6a       L6b
+  o         o                             o         o
+
+  root
+  +-- L0  (router)
+  |   +-- L0a (leaf)
+  |   +-- L0b (leaf)
+  +-- L1  (leaf)
+  +-- L2  (leaf)
+  +-- L3  (leaf)
+  +-- L4  (leaf)
+  +-- L5  (leaf)
+  +-- L6  (router)
+  |   +-- L6a (leaf)
+  |   +-- L6b (leaf)
+  +-- L7  (leaf)
+
+  8 leaves -> 10 leaves
+
+
+(D) Sub-expert grow — child L0b splits; all 8 top slots still visible
+=====================================================================
+
+
+                              root
+                               |
+       +-------+-------+-------+-------+-------+-------+-------+-------+
+       |       |       |       |       |       |       |       |       |
+      L0      L1      L2      L3      L4      L5      L6      L7
+       R       o       o       o       o       o       R       o
+       |                                       |
+  +----+----+                             +----+----+
+  |         |                             |         |
+ L0a       L0b                           L6a       L6b
+  o         R                             o         o
+            |
+       +----+----+
+       |         |
+     L0b1       L0b2
+       o         o
+
+  root
+  +-- L0  (router)
+  |   +-- L0a (leaf)
+  |   +-- L0b (router)  <-- sub-expert split (depth-2 leaf)
+  |       +-- L0b1 (leaf)
+  |       +-- L0b2 (leaf)
+  +-- L1  (leaf)
+  +-- L2  (leaf)
+  +-- L3  (leaf)
+  +-- L4  (leaf)
+  +-- L5  (leaf)
+  +-- L6  (router)
+  |   +-- L6a (leaf)
+  |   +-- L6b (leaf)
+  +-- L7  (leaf)
+
+  10 leaves -> 11 leaves
+  (kitchen-like: L0_1_c1_13 split at iter 18k)
+
+
+(E) Same grow check — TWO heads (separate trees, both fully drawn)
+==================================================================
+
+
+  COLOR head @ iter 6000                 OPACITY head @ iter 6000
+  (splits L6)                            (splits L0)
+
+                root                               root
+                 |                                  |
+  +---+---+---+---+---+---+---+---+    +---+---+---+---+---+---+---+---+
+  L0 L1 L2 L3 L4 L5 L6 L7            L0 L1 L2 L3 L4 L5 L6 L7
+  o  o  o  o  o  o  R  o             R  o  o  o  o  o  o  o
+                    |                |
+               +----+----+      +----+----+
+              L6a      L6b     L0a      L0b
+
+  COV head @ same iter: no split — all 8 leaves stay single:
+
+                root
+                 |
+  +---+---+---+---+---+---+---+---+
+  L0 L1 L2 L3 L4 L5 L6 L7
+  o  o  o  o  o  o  o  o
+
+  Limit: max 2 heads grow per check (here: color + opacity).
+
+
+(F) Depth limit — depth-3 leaves cannot split again (moe_tree_depth=3)
+======================================================================
+
+
+  root
+  +-- L0 (router)
+  |   +-- L0a (leaf, depth=2)
+  |   +-- L0b (router, depth=2)
+  |       +-- L0b1 (leaf, depth=3)  <- MAX DEPTH, cannot split
+  |       +-- L0b2 (leaf, depth=3)  <- MAX DEPTH, cannot split
+  +-- L1 (leaf)
+  +-- L2 (leaf)
+  +-- L3 (leaf)
+  +-- L4 (leaf)
+  +-- L5 (leaf)
+  +-- L6 (router)
+  |   +-- L6a (leaf)
+  |   +-- L6b (leaf)
+  +-- L7 (leaf)
+
