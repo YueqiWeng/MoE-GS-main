@@ -1,0 +1,8 @@
+00034.png x=0 y=0 s=240 score=26.90
+00034.png x=192 y=0 s=240 score=23.28
+00034.png x=336 y=0 s=240 score=22.84
+00036.png x=0 y=816 s=240 score=25.66
+00036.png x=624 y=816 s=240 score=14.48
+00036.png x=144 y=816 s=240 score=14.36
+00036.png x=192 y=624 s=240 score=13.56
+00029.png x=1344 y=816 s=240 score=17.82

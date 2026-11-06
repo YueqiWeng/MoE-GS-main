@@ -1,0 +1,8 @@
+00021.png x=1155 y=350  3dgs=14.8 sc=1.8 tr=1.6 gap=13.1 lostHF=15.0
+00021.png x=1190 y=490  3dgs=12.8 sc=1.8 tr=1.9 gap=10.9 lostHF=13.2
+00021.png x=840 y=175  3dgs=23.0 sc=5.7 tr=5.2 gap=17.8 lostHF=4.1
+00021.png x=1295 y=350  3dgs=9.6 sc=1.6 tr=1.7 gap=7.9 lostHF=10.0
+00021.png x=1330 y=490  3dgs=7.9 sc=2.0 tr=2.4 gap=5.4 lostHF=8.2
+00021.png x=1015 y=245  3dgs=16.5 sc=5.1 tr=4.7 gap=11.8 lostHF=4.3
+00021.png x=1295 y=630  3dgs=5.3 sc=3.3 tr=2.5 gap=2.8 lostHF=5.9
+00021.png x=105 y=595  3dgs=6.6 sc=3.8 tr=3.7 gap=2.9 lostHF=5.4

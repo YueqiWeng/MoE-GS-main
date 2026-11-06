@@ -1,0 +1,414 @@
+\section{Method}
+\label{sec:method}
+
+We keep the Scaffold-GS scene representation and rasterizer, and replace each shared attribute decoder by a mixture of experts.
+A flat MoE is trained first and then converted into a growing tree, so that additional experts are allocated only where residual difficulty remains high.
+Default values of all symbols appear in Table~\ref{tab:hparams}.
+
+\subsection{Preliminaries: Scaffold-GS}
+\label{sec:prelim}
+
+Scaffold-GS represents a scene by anchors $\mathcal{A}=\{(\mathbf{x}_i,\mathbf{f}_i)\}_{i=1}^{N}$,
+where $\mathbf{x}_i\in\mathbb{R}^{3}$ is a position and $\mathbf{f}_i\in\mathbb{R}^{C}$ is a learnable feature.
+For a camera, visible anchors produce a view-conditioned input $\mathbf{u}_i=\phi(\mathbf{f}_i,\mathbf{d}_i,\ldots)$,
+with $\mathbf{d}_i$ the viewing direction.
+Three attribute networks $F_h$, $h\in\{\alpha,\Sigma,c\}$, map $\mathbf{u}_i$ to opacity, covariance, and color of the associated neural Gaussians.
+The predicted image is
+\begin{equation}
+\hat{I}
+=
+\mathcal{R}\!\left(
+\big\{(\alpha_j,\boldsymbol{\Sigma}_j,\mathbf{c}_j)\big\}_{j}
+\right),
+\label{eq:render}
+\end{equation}
+where $\mathcal{R}$ denotes differentiable Gaussian rasterization.
+We retain $\mathcal{R}$ and the Scaffold-GS attribute-conversion heads, and replace only $\{F_h\}$.
+Throughout, the router of each head consumes the anchor feature $\mathbf{f}_i$ and does not use a GNN.
+
+\subsection{Flat Mixture-of-Experts Decoding}
+\label{sec:flat}
+
+Each head $h$ consists of $E$ expert MLPs $\{f_e^{(h)}\}_{e=1}^{E}$ and a linear router $r^{(h)}$.
+$E$ is the number of specialists that share the work of one Scaffold-GS MLP;
+the router maps the anchor feature to a distribution over those specialists.
+Experts share a two-layer architecture with a ReLU hidden unit and the same output activation as Scaffold-GS.
+The router produces mixing weights
+\begin{equation}
+\mathbf{g}_i^{(h)}
+=
+\operatorname{softmax}\!\big(
+r^{(h)}(\mathbf{f}_i)+\boldsymbol{\eta}_i^{(h)}
+\big)
+\in\Delta^{E-1}.
+\label{eq:flat-gates}
+\end{equation}
+During dense training we add i.i.d.\ Gaussian logit noise $\boldsymbol{\eta}_i^{(h)}\sim\mathcal{N}(\mathbf{0},\sigma_{\eta}^{2}\mathbf{I})$,
+where $\sigma_{\eta}$ is a small exploration scale that prevents the router from collapsing onto one expert too early;
+otherwise $\boldsymbol{\eta}_i^{(h)}=\mathbf{0}$.
+
+For the first $T_{\mathrm{w}}$ iterations---a dense warm-up---every expert remains active and $\mathbf{w}_i^{(h)}=\mathbf{g}_i^{(h)}$.
+After warm-up, Top-$k$ keeps only the $k$ largest gates (the $k$ experts assigned to that anchor) and renormalizes:
+\begin{equation}
+\begin{aligned}
+\mathbf{w}_i^{(h)}
+&=
+\frac{\operatorname{TopK}(\mathbf{g}_i^{(h)},k)}
+{\|\operatorname{TopK}(\mathbf{g}_i^{(h)},k)\|_{1}},
+\\
+F_h(\mathbf{u}_i^{(h)})
+&=
+\sum_{e=1}^{E}
+w_{i,e}^{(h)}\,f_e^{(h)}(\mathbf{u}_i^{(h)}).
+\end{aligned}
+\label{eq:topk}
+\end{equation}
+$\operatorname{TopK}(\cdot,k)$ zeroes all but the $k$ largest entries.
+The implementation evaluates every expert and then forms the weighted sum, so Top-$k$ sparsifies the mixture weights rather than skipping expert computation.
+
+\subsection{Growing Tree MoE}
+\label{sec:tree}
+
+Each attribute head maintains its own rooted tree: routers sit at internal nodes and experts at leaves $\mathcal{L}_h$.
+Stage~B starts from a depth-1 tree with $E$ leaves under the root, copying the flat-MoE experts and root router one-to-one.
+
+At a node $\nu$ with $b_{\nu}$ children, the same dense / Top-$k$ rule as in Eq.~\eqref{eq:topk} is applied with
+$k_{\nu}=\min(k,b_{\nu})$.
+Top-$k$ is therefore a \emph{node-level} restriction, not a cap on the number of active leaves in the whole tree.
+The mixture weight of leaf $\ell$ is the product of mix weights along its path,
+\begin{equation}
+\begin{aligned}
+\pi_i^{(h)}(\ell)
+&=
+\prod_{(\nu\rightarrow j)\in\operatorname{path}(\ell)}
+w_{i,\nu\rightarrow j}^{(h)},
+\\
+F_h(\mathbf{u}_i^{(h)})
+&=
+\sum_{\ell\in\mathcal{L}_h}
+\pi_i^{(h)}(\ell)\,f_\ell^{(h)}(\mathbf{u}_i^{(h)}).
+\end{aligned}
+\label{eq:tree-output}
+\end{equation}
+Dense path weights $\tilde{\pi}_i^{(h)}(\ell)$ are defined analogously from the full softmax gates and are used in auxiliary losses.
+
+A split replaces a leaf $\ell$ by a new linear router and $G$ child experts, where $G$ is the branching factor of a growth event (binary in our experiments).
+Child parameters are cloned from the parent and perturbed,
+\begin{equation}
+\boldsymbol{\theta}_{\ell\rightarrow j}^{(h)}
+=
+\boldsymbol{\theta}_{\ell}^{(h)}+\boldsymbol{\varepsilon}_{j},
+\qquad
+\boldsymbol{\varepsilon}_{j}\sim\mathcal{N}(\mathbf{0},\sigma_{\mathrm{split}}^{2}\mathbf{I}),
+\label{eq:split}
+\end{equation}
+so that the $G$ children start as copies of the parent but are not identical;
+$\sigma_{\mathrm{split}}$ is the scale of that symmetry-breaking noise.
+Each split adds $G-1$ net leaves.
+Three hard caps keep trees from growing without bound:
+$D_{\max}$ is the maximum depth of any leaf,
+$G_{\max}$ is the maximum number of splits allowed on one head,
+and $L_{\max}$ is the maximum number of leaves on one head.
+At a growth check, at most $H_{\mathrm{evt}}$ heads may split (so opacity, covariance, and color cannot all grow at once), and at most one leaf per selected head is split.
+
+\subsection{Traffic- and Difficulty-Guided Growth}
+\label{sec:growth}
+
+Growth uses three training-time statistics---routing traffic, residual reconstruction error, and feature variation---as proxies for where extra capacity may help.
+They are not a formal information-gain criterion.
+We drop the head index below.
+
+Let $\mathcal{V}_t$ be the visible anchors at iteration $t$, and let $\mathcal{W}$ be the iterations since the last statistics reset of that head.
+With mix weights $\pi_i^{(t)}$ (dense or Top-$k$, whichever is used for rendering),
+\begin{equation}
+\begin{aligned}
+m_{\ell}^{(t)}
+&=
+\sum_{i\in\mathcal{V}_t}\pi_i^{(t)}(\ell),
+\qquad
+m_{\ell}
+=
+\sum_{t\in\mathcal{W}}m_{\ell}^{(t)},
+\qquad
+p_{\ell}
+=
+\frac{m_{\ell}}{\sum_{\ell'}m_{\ell'}}.
+\end{aligned}
+\label{eq:traffic}
+\end{equation}
+Here $m_{\ell}$ is the total routing mass that reached leaf $\ell$ in the window (how much of the scene that leaf is responsible for),
+and $p_{\ell}$ is that mass as a fraction of all leaves.
+A traffic-weighted average of the \emph{image-level} $\ell_1$ loss $\mathcal{L}_{1}^{(t)}$ is
+\begin{equation}
+L_{\ell}
+=
+\frac{\sum_{t\in\mathcal{W}}m_{\ell}^{(t)}\,\mathcal{L}_{1}^{(t)}}{m_{\ell}}.
+\label{eq:leaf-loss}
+\end{equation}
+$L_{\ell}$ is a proxy for how hard the views assigned to $\ell$ are to reconstruct.
+Because $\mathcal{L}_{1}^{(t)}$ is shared across leaves of a given view, $L_{\ell}$ ranks leaves through their traffic over $\mathcal{W}$, not through pixel-to-leaf residual assignment.
+Feature variation $v_{\ell}$ measures whether the anchors routed to $\ell$ have similar features or mixed ones: it is the traffic-weighted, dimension-averaged variance of $\mathbf{f}_i$,
+\begin{equation}
+\begin{aligned}
+\boldsymbol{\mu}_{\ell}^{(t)}
+&=
+\frac{\sum_{i\in\mathcal{V}_t}\pi_i^{(t)}(\ell)\,\mathbf{f}_i}{m_{\ell}^{(t)}},
+\\
+v_{\ell}^{(t)}
+&=
+\frac{\sum_{i\in\mathcal{V}_t}\pi_i^{(t)}(\ell)\,
+\|\mathbf{f}_i-\boldsymbol{\mu}_{\ell}^{(t)}\|_{2}^{2}}{C\,m_{\ell}^{(t)}},
+\\
+v_{\ell}
+&=
+\frac{1}{|\mathcal{W}_{\ell}|}\sum_{t\in\mathcal{W}_{\ell}}v_{\ell}^{(t)},
+\end{aligned}
+\label{eq:leaf-variance}
+\end{equation}
+where $\mathcal{W}_{\ell}\subseteq\mathcal{W}$ keeps steps with non-negligible mass on $\ell$.
+
+Relative difficulty $R_{\ell}$ is the leaf loss divided by the median leaf loss: values above $1$ mean this leaf is harder than a typical leaf.
+The split score multiplies traffic, excess difficulty, and feature spread:
+\begin{equation}
+\begin{aligned}
+R_{\ell}
+&=
+\frac{L_{\ell}}{\operatorname{median}_{\ell'}L_{\ell'}},
+\\
+S_{\ell}
+&=
+p_{\ell}\,
+\bigl(1+\max(0,R_{\ell}-1)\bigr)^{\beta}\,
+(1+\lambda_{v}v_{\ell}).
+\end{aligned}
+\label{eq:growth-score}
+\end{equation}
+Here $\beta\ge 1$ controls how strongly above-median reconstruction error is emphasized,
+and $\lambda_{v}\ge 0$ controls how much mixed anchor features raise the score.
+A leaf is therefore preferred if it is used often, is harder than the median leaf, and covers diverse features.
+Only leaves with recorded traffic enter these statistics.
+
+A structurally eligible leaf (depth and capacity limits) is a candidate only if it also clears four gates
+\begin{equation}
+p_{\ell}\ge\tau_{p},
+\quad
+R_{\ell}\ge\tau_{R},
+\quad
+1+\frac{v_{\ell}}{\operatorname{median}_{\ell'}v_{\ell'}}\ge\tau_{v},
+\quad
+S_{\ell}\ge\tau_{S}\,
+\operatorname{median}_{\ell'\in\mathcal{C}}S_{\ell'},
+\label{eq:growth-gates}
+\end{equation}
+where $\mathcal{C}$ is the set of traffic-supported, structurally eligible leaves of that head.
+In words:
+$\tau_{p}$ is the minimum traffic share, so rarely used leaves are not split;
+$\tau_{R}$ is the minimum relative loss, so easy leaves are not split;
+$\tau_{v}$ is the minimum relative feature diversity, so a leaf must mix more varied features than the median;
+and $\tau_{S}$ requires the score to exceed the median score by a margin, so only a clearly stronger candidate grows.
+
+To keep the three attribute trees from diverging, a head that currently has fewer leaves than the largest head is treated as \emph{lagging}.
+For lagging heads the thresholds $(\tau_{S},\tau_{p},\tau_{R})$ are multiplied by scale factors $\boldsymbol{\gamma}<1$ (a uniform relaxation that makes a smaller tree easier to grow), and the variation gate $\tau_{v}$ is omitted.
+An additional relaxation is applied when the color head is the one that lags, since appearance is typically the hardest attribute.
+If that head still has no ordinary candidate after another head has grown, a fallback may admit its highest-scoring structurally valid leaf.
+Across heads, proposals are ordered by lagging status, then by a fixed head priority (color, opacity, covariance), then by $S_{\ell}$.
+The highest-scoring eligible leaf in each of the top $H_{\mathrm{evt}}$ heads is split.
+
+After a successful split, statistics of that head are cleared and newly created parameters are registered with Adam, preserving optimizer state for surviving weights.
+Heads that do not split keep their accumulated statistics.
+All heads then use dense routing for $T_{\mathrm{d}}$ iterations before resuming Top-$k$,
+giving the new children a short window in which they can attract traffic before sparsification.
+
+\begin{figure}[t]
+\centering
+\includegraphics[width=\linewidth]{Tree_MoE_CVPR_LaTeX/tree_growth_concept.png}
+\caption{Tree MoE growth. Each head starts from the flat-MoE experts as root leaves. A selected leaf is replaced by a local router and $G$ child experts. Heads keep separate trees and split budgets; at most $H_{\mathrm{evt}}$ heads split at a given check.}
+\label{fig:tree_growth_concept}
+\end{figure}
+
+\subsection{Training Objective}
+\label{sec:objectives}
+
+We retain the Scaffold-GS reconstruction and scale terms,
+\begin{equation}
+\begin{aligned}
+\mathcal{L}_{\mathrm{rgb}}
+={}&
+(1-\lambda_{\mathrm{SSIM}})\,\mathcal{L}_{1}(\hat{I},I)
++\lambda_{\mathrm{SSIM}}\bigl[1-\operatorname{SSIM}(\hat{I},I)\bigr]
+\\
+&+\lambda_{\mathrm{s}}\,
+\mathbb{E}\!\left[\prod_{d=1}^{3}s_{d}\right],
+\end{aligned}
+\label{eq:rgb-loss}
+\end{equation}
+where $s_{d}$ are scales of Gaussians retained by the opacity mask,
+$\lambda_{\mathrm{SSIM}}$ is the usual trade-off between pixel $\ell_1$ and SSIM,
+and $\lambda_{\mathrm{s}}$ penalizes overly large Gaussians.
+An opacity penalty is applied to decoder outputs \emph{before} that mask,
+\begin{equation}
+\mathcal{L}_{\mathrm{op}}
+=
+\mathbb{E}\bigl[\max(0,\tau_{\alpha}-\alpha)\bigr],
+\label{eq:opacity-loss}
+\end{equation}
+where $\tau_{\alpha}$ is a hinge threshold (zero in our setting, so only negative opacities are penalized).
+The weight $\lambda_{\mathrm{op}}$ of this term is introduced in the total loss below.
+
+For an internal router $\nu$, let $\mathbf{P}_{\nu}=\mathbb{E}_{i}[\mathbf{g}_{i,\nu}]$ be the mean softmax gate
+and let $\mathbf{a}_{\nu}$ be the mean child-selection indicator (binary under Top-$k$, equal to $\mathbf{P}_{\nu}$ when dense).
+The Switch-style load-balancing loss averages over routers of a head and then over the three heads:
+\begin{equation}
+\mathcal{L}_{\mathrm{load}}
+=
+\frac{1}{3}\sum_{h}
+\frac{1}{|\mathcal{I}_{h}|}
+\sum_{\nu\in\mathcal{I}_{h}}
+b_{\nu}\,
+\mathbf{P}_{\nu}^{\top}\mathbf{a}_{\nu},
+\label{eq:load-loss}
+\end{equation}
+where $\mathcal{I}_{h}$ is the set of internal routers of head $h$ (a single root router in the flat MoE).
+Router statistics are computed over visible anchors, unweighted by path mass.
+We also penalize the entropy of the dense leaf-path distribution,
+\begin{equation}
+\mathcal{L}_{\mathrm{ent}}
+=
+-\frac{1}{3}\sum_{h}
+\mathbb{E}_{i}
+\left[
+\sum_{\ell\in\mathcal{L}_{h}}
+\tilde{\pi}_{i}^{(h)}(\ell)
+\log\tilde{\pi}_{i}^{(h)}(\ell)
+\right].
+\label{eq:entropy-loss}
+\end{equation}
+Minimizing $\mathcal{L}_{\mathrm{ent}}$ encourages concentrated routing: each anchor should commit to few leaves rather than spreading mass uniformly.
+The full objective is
+\begin{equation}
+\mathcal{L}
+=
+\mathcal{L}_{\mathrm{rgb}}
++\lambda_{\mathrm{op}}\mathcal{L}_{\mathrm{op}}
++\lambda_{\mathrm{load}}(t)\,\mathcal{L}_{\mathrm{load}}
++\lambda_{\mathrm{ent}}(t)\,\mathcal{L}_{\mathrm{ent}},
+\label{eq:total-loss}
+\end{equation}
+with a curriculum on the auxiliary weights,
+\begin{equation}
+\lambda_{\mathrm{load}}(t)
+=
+\begin{cases}
+\lambda_{\mathrm{load}}, & t\le T_{\mathrm{w}},\\
+\rho_{\mathrm{load}}\,\lambda_{\mathrm{load}}, & t>T_{\mathrm{w}},
+\end{cases}
+\quad
+\lambda_{\mathrm{ent}}(t)
+=
+\begin{cases}
+0, & t\le T_{\mathrm{w}},\\
+\lambda_{\mathrm{ent}}, & t>T_{\mathrm{w}}.
+\end{cases}
+\label{eq:loss-schedule}
+\end{equation}
+During warm-up, $\lambda_{\mathrm{load}}$ encourages every expert to receive some traffic, while entropy regularization is off so the router may still explore.
+After warm-up, load balancing is scaled down by $\rho_{\mathrm{load}}\in(0,1)$ and entropy regularization with weight $\lambda_{\mathrm{ent}}$ is turned on, so routing may specialize.
+This schedule follows the global iteration counter and is not restarted during post-growth dense windows.
+
+\subsection{Two-Stage Training}
+\label{sec:recipe}
+
+\paragraph{Stage A: flat MoE.}
+From the Scaffold-GS SfM initialization we train the $E$-expert flat MoE for $T$ iterations, including the standard anchor densification and pruning schedule.
+$T$ is the length of one full training stage.
+
+\paragraph{Stage B: growing tree MoE.}
+The tree experts and root routers, together with the stored anchors (features and geometric parameters), are copied from Stage~A.
+Densification and pruning are disabled.
+Stage~B runs a fresh $T$-iteration schedule with its own warm-up $T_{\mathrm{w}}$.
+Growth is allowed only inside a window $[T_{\mathrm{start}},T_{\mathrm{stop}}]$, and actual split attempts occur at a prescribed set of iterations $\mathcal{T}_{\mathrm{g}}$ inside that window.
+
+\begin{algorithm}[t]
+\caption{Growing Tree MoE (Stage B)}
+\label{alg:tree}
+\small
+\begin{algorithmic}[1]
+\Require Flat-MoE checkpoint; growth schedule $\mathcal{T}_{\mathrm{g}}$ and limits $(D_{\max},G_{\max},L_{\max},H_{\mathrm{evt}})$.
+\Ensure Trained tree MoE.
+\State Copy $E$ root leaves and the root router from Stage~A; load anchors; disable densification; reset growth statistics.
+\For{$t=1,\ldots,T$}
+  \State Dense routing if $t\le T_{\mathrm{w}}$ or inside a post-growth dense window; else node-wise Top-$k$.
+  \State Render, compute $\mathcal{L}$, backpropagate, and record $(m_{\ell},L_{\ell},v_{\ell})$.
+  \State Adam step (if $t<T$).
+  \If{$t\in\mathcal{T}_{\mathrm{g}}$}
+    \State Score eligible leaves with Eqs.~\eqref{eq:growth-score}--\eqref{eq:growth-gates}; relax thresholds for lagging heads.
+    \State Order proposals by lag, head priority, then $S_{\ell}$; split at most $H_{\mathrm{evt}}$ heads.
+    \If{any split succeeds}
+      \State Reset statistics of split heads; register new Adam parameters; dense-route for $T_{\mathrm{d}}$ steps.
+    \EndIf
+  \EndIf
+\EndFor
+\State \Return trained tree MoE.
+\end{algorithmic}
+\end{algorithm}
+
+\begin{algorithm}[t]
+\caption{\textsc{SplitLeaf}($h,\ell$)}
+\label{alg:grow}
+\small
+\begin{algorithmic}[1]
+\State Abort if $\operatorname{depth}(\ell)\ge D_{\max}$, head $h$ has used $G_{\max}$ splits, or $|\mathcal{L}_{h}|+(G-1)>L_{\max}$.
+\State Replace $\ell$ by a $G$-way linear router and $G$ children cloned from $\ell$ as in Eq.~\eqref{eq:split}.
+\end{algorithmic}
+\end{algorithm}
+
+% Place in Experiments. Do not put unswept growth-score constants in the main paper.
+Training length and the photometric / scale losses follow 3D-GS and Scaffold-GS.
+Top-$k$ routing, noisy gating, and the Switch load-balancing form follow
+Shazeer~\textit{et al.}~\cite{shazeer2017moe} and Fedus~\textit{et al.}~\cite{fedus2022switch}.
+MoE width, Top-$k$, the dense warm-up, load balancing, and the split budget
+are the knobs we actually vary; remaining growth-score coefficients
+($\beta$, $\lambda_{v}$, $\tau_{p}$, $\tau_{R}$, $\tau_{v}$, $\tau_{S}$)
+are held fixed on every scene and are not claimed as tuned contributions.
+
+\begin{table}[t]
+\centering
+\caption{Settings inherited from prior work. We do not retune these per scene.}
+\label{tab:hparams-inherited}
+\setlength{\tabcolsep}{4pt}
+\small
+\begin{tabular}{lllp{0.42\linewidth}}
+\toprule
+Symbol & Value & Source & Role \\
+\midrule
+$T$ & $30\mathrm{k}$ & 3D-GS~\cite{kerbl20233d} & Iterations per stage \\
+$\lambda_{\mathrm{SSIM}}$ & $0.2$ & 3D-GS~\cite{kerbl20233d} & SSIM versus $\ell_1$ in $\mathcal{L}_{\mathrm{rgb}}$ \\
+$\lambda_{\mathrm{s}}$ & $0.01$ & Scaffold-GS~\cite{lu2024scaffold} & Gaussian scale regularizer \\
+$G$ & $2$ & binary split & Children created by one growth event \\
+$k$ (mechanism) & Top-$k$ & Switch~\cite{shazeer2017moe,fedus2022switch} & Sparse expert (or child) selection \\
+$\mathcal{L}_{\mathrm{load}}$ & Switch form & Fedus~\textit{et al.}~\cite{fedus2022switch} & Load-balancing auxiliary \\
+$\boldsymbol{\eta}$ & Gaussian noise & Shazeer~\textit{et al.}~\cite{shazeer2017moe} & Logit noise during dense routing \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[t]
+\centering
+\caption{Settings introduced in this work, kept only when a sensitivity run exists.
+Mean PSNR is on the 19-scene paper split.}
+\label{tab:hparams}
+\setlength{\tabcolsep}{4pt}
+\small
+\begin{tabular}{llp{0.55\linewidth}}
+\toprule
+Symbol & Default & Sensitivity \\
+\midrule
+$E$ & $8$ & Flat MoE $E\in\{4,8\}$ with Top-$1$/$2$; default is the standard recipe, not a unique peak. \\
+$k$ & $2$ & Same $E{\times}$Top-$k$ grid. Top-$2$ is the reported operating point. \\
+$G_{\max}$ & $4$ & $G_{\max}\in\{0,2,4\}$. $G_{\max}{=}0$ already gives $+0.30$\,dB vs.\ flat MoE; $4$ vs.\ $0$ is $+0.005$\,dB. \\
+$T_{\mathrm{w}}$ & $3\mathrm{k}$ & On vs.\ off (no curriculum). $\Delta$ vs.\ Full is $-0.01$\,dB. \\
+$\lambda_{\mathrm{load}}$ & $0.005$ & On vs.\ off. $\Delta$ vs.\ Full is $0.00$\,dB; kept for Switch-style balance, not PSNR. \\
+Warm-start & on & Off drops to $30.56$\,dB, i.e.\ Scaffold-GS level. \\
+\bottomrule
+\end{tabular}
+\end{table}

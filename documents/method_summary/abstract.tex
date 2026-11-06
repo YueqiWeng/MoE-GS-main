@@ -1,0 +1,11 @@
+\begin{abstract}
+Anchor-based 3D Gaussian Splatting, as in Scaffold-GS, represents a scene by sparse anchors that spawn view-dependent neural Gaussians.
+Shared MLPs decode opacity, covariance, and color with a single fixed capacity, so anchors that are easy and hard to reconstruct are treated the same.
+We replace these decoders with a \emph{Growing Tree Mixture-of-Experts} (Tree MoE).
+A flat bank of experts is trained first and copied into a tree; a later growth rule may split a leaf into two children only when that leaf has high routing traffic, high residual loss, and high feature variation.
+The intent is hierarchical capacity: easy regions can remain at shallow experts, while harder regions receive additional leaves.
+
+On 19 scenes from Mip-NeRF~360, Tanks \& Temples, Deep Blending, and NeRF-Synthetic, the full recipe improves mean PSNR by $+0.35$\,dB over Scaffold-GS and $+0.30$\,dB over a flat MoE, and is best on all 19 scenes against the flat MoE.
+Ablations show that most of the gain comes from expert specialization and from continuing to train a warm-started tree---even with no splits.
+Further leaf growth adds only a small, scene-dependent refinement, while producing an interpretable routing hierarchy.
+\end{abstract}

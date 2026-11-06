@@ -1,0 +1,18 @@
+\begin{figure*}
+    \centering
+    \includegraphics[width=0.95\linewidth]{Qualitative comparison.png}
+    \caption{Qualitative comparison on Deep Blending \texttt{playroom} (top)
+    and Mip-NeRF~360 \texttt{garden} (bottom).
+    Columns are Scaffold-GS, flat MoE, and Tree MoE.
+    The red box marks the region shown in the corner inset.
+    On \texttt{playroom} the inset is the ceiling fixture:
+    Scaffold-GS collapses it to a burned blob, flat MoE restores a
+    rectangular lamp, and Tree MoE recovers the internal grid of the light.
+    On \texttt{garden} the inset is the house facade behind the table:
+    Scaffold-GS leaves fog and sparkle on the brick and windows, flat MoE
+    reduces the haze, and Tree MoE keeps the sharpest window frames and
+    masonry.
+    These two views are the failures that remain obvious at paper size
+    (missing geometry or a blob, not a small sharpness change).}
+    \label{fig:qualitative}
+\end{figure*}

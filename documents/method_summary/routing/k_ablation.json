@@ -1,0 +1,21 @@
+{
+  "scene": "db/playroom",
+  "curves": {
+    "5": {
+      "run": "/home/qiqi/Documents/Scaffold-GS-main/outputs/db/playroom/k_ablate_k5/2026-10-27_14:30:53",
+      "psnr": 30.78567886352539,
+      "final": 2.783010023252171
+    },
+    "10": {
+      "run": "/home/qiqi/Documents/Scaffold-GS-main/outputs/db/playroom/k_ablate_k10/2026-10-27_14:43:06",
+      "psnr": 30.80370330810547,
+      "final": 3.711060702842183
+    },
+    "20": {
+      "run": "/home/qiqi/Documents/Scaffold-GS-main/outputs/db/playroom/k_ablate_k20/2026-10-27_14:55:40",
+      "psnr": 30.880977630615234,
+      "final": 6.701673708559253
+    }
+  },
+  "png": "/home/qiqi/Documents/Scaffold-GS-main/documents/method_summary/figures/k_ablation.png"
+}

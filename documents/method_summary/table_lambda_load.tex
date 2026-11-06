@@ -1,0 +1,18 @@
+\begin{table}[t]
+\centering
+\caption{Sensitivity of Tree MoE to the load-balancing weight $\lambda_{\mathrm{load}}$ (warm-started Stage~B; all other knobs fixed). Mean PSNR on the 19-scene paper split. $\lambda{=}0$ disables $\mathcal{L}_{\mathrm{load}}$; $0.005$ is the default.}
+\label{tab:lambda-load}
+\setlength{\tabcolsep}{4pt}
+\small
+\begin{tabular}{lccccc}
+\toprule
+Split & $\lambda=0$ & $\lambda=0.001$ & $\lambda=0.005$ & $\lambda=0.01$ & $\lambda=0.05$ \\
+\midrule
+Mip-NeRF 360 & 29.80 & 25.46 & 29.80 & -- & -- \\
+Tanks \& Temples & 24.53 & -- & 24.52 & -- & -- \\
+Deep Blending & 30.51 & -- & 30.50 & -- & -- \\
+NeRF-Synthetic & 33.56 & -- & 33.57 & -- & -- \\
+\textbf{Paper-19} & 30.90 & 25.46 & 30.91 & -- & -- \\
+\bottomrule
+\end{tabular}
+\end{table}

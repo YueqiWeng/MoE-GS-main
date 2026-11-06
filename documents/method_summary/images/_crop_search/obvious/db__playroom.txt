@@ -1,0 +1,10 @@
+00009.png x=280 y=640 s=160  3dgs=28.5 sc=15.1 moe=14.5 tr=15.4  gap3=13.0 gaps=-0.3
+00009.png x=0 y=520 s=160  3dgs=25.7 sc=19.5 moe=18.5 tr=19.1  gap3=6.6 gaps=0.4
+00009.png x=160 y=440 s=160  3dgs=20.7 sc=17.7 moe=16.2 tr=15.8  gap3=4.9 gaps=1.9
+00009.png x=360 y=360 s=160  3dgs=11.2 sc=9.2 moe=10.4 tr=9.5  gap3=1.7 gaps=-0.3
+00009.png x=560 y=160 s=160  3dgs=7.9 sc=7.8 moe=8.1 tr=7.8  gap3=0.2 gaps=0.0
+00025.png x=0 y=520 s=160  3dgs=5.4 sc=6.5 moe=6.2 tr=6.1  gap3=-0.7 gaps=0.4
+00000.png x=720 y=600 s=160  3dgs=4.4 sc=6.1 moe=4.6 tr=4.4  gap3=-0.1 gaps=1.6
+00000.png x=560 y=640 s=160  3dgs=4.2 sc=4.9 moe=4.5 tr=4.2  gap3=-0.1 gaps=0.7
+00000.png x=40 y=280 s=160  3dgs=5.3 sc=6.6 moe=6.3 tr=5.7  gap3=-0.4 gaps=0.9
+00000.png x=0 y=440 s=160  3dgs=6.3 sc=7.3 moe=7.4 tr=7.1  gap3=-0.7 gaps=0.2

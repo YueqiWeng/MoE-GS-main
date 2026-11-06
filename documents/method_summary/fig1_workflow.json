@@ -1,0 +1,277 @@
+{
+  "meta": {
+    "id": "fig1_growing_tree_moe",
+    "title": "Method overview: Growing Tree MoE for Scaffold-GS",
+    "venue": "CVPR",
+    "figure": "Figure 1",
+    "caption": "Overview of our Growing Tree MoE decoder on Scaffold-GS (no GNN). SfM points initialize anchors $(x_i,f_i)$. For each view, anchors yield view features $u_i=\\phi(f_i,d_i,\\ldots)$. Each attribute head $h\\in\\{\\alpha,\\Sigma,c\\}$ uses a Tree MoE: routers at internal nodes, experts at leaves. At Stage-B init the tree has $B=8$ root leaves warm-started 1:1 from a flat MoE; sparse Top-$k$ ($k=2$) is applied per router, and leaf probabilities are path products $\\pi_i(\\ell)$. Expert outputs are mixed to predict neural-Gaussian attributes, then rasterized. Training minimizes $\\mathcal{L}_{rgb}$ plus MoE auxiliaries $\\mathcal{L}_{op}$, $\\mathcal{L}_{load}$, $\\mathcal{L}_{ent}$. Optional leaf growth is omitted from this overview (see Sec.~3).",
+    "claimed_method": "moe_tree",
+    "excludes": ["GNN"],
+    "honesty_notes": [
+      "Tree drawing shows Stage-B initialization (8 root leaves), not a post-growth tree.",
+      "Top-k is applied at each router over its children (k=min(2,b)), not a flat Top-2 over all leaves.",
+      "Orange/green/blue colors are schematic only; they do not map to opacity/cov/color in code.",
+      "Losses match paper Sec. 3.5; do not use the style-template paper's L_opacity+L_load alone.",
+      "Rendered vs GT shows a training view used by L_rgb (not a test-set novel view)."
+    ],
+    "style_template": "documents/method_summary/assets_ref/moe_template_style.jpg",
+    "style_notes": [
+      "Borrow layout language only (SfM → anchors → MoE panel → predictions → render/GT).",
+      "Do not copy that paper's dense/sparse/CL branch architecture.",
+      "No numbered step badges; no external legend/growth boxes.",
+      "White background; one light-blue MoE panel; thin dark arrows."
+    ]
+  },
+  "layout": {
+    "direction": "LR",
+    "aspect_ratio": "16:5",
+    "canvas": {"width": 1600, "height": 520, "background": "#FFFFFF"},
+    "columns": [
+      {"id": "input", "x_span": [0.0, 0.18], "role": "input"},
+      {"id": "moe", "x_span": [0.18, 0.72], "role": "core"},
+      {"id": "output", "x_span": [0.72, 1.0], "role": "output"}
+    ]
+  },
+  "palette": {
+    "panel_fill": "#D4E6F1",
+    "panel_stroke": "#5DADE2",
+    "router": "#E67E22",
+    "expert": "#27AE60",
+    "expert_alt": "#2980B9",
+    "warm_start": "#8E44AD",
+    "text": "#2C3E50",
+    "muted": "#7F8C8D",
+    "anchor": "#2980B9",
+    "color_semantics": "Decorative only. Router nodes use orange; expert leaves alternate green/blue. Do not encode attribute heads by these colors."
+  },
+  "hyperparams_claimed": {
+    "flat_experts_E": 8,
+    "tree_root_leaves_B": 8,
+    "topk_k": 2,
+    "curriculum_Tw": 3000,
+    "max_grows_Gmax": 4,
+    "max_depth_Dmax": 3,
+    "max_leaves_Lmax": 14,
+    "grow_checks": [6000, 10000, 14000, 18000],
+    "router_feature": "z_i = f_i (no GNN)"
+  },
+  "equations": [
+    {
+      "id": "eq_gates",
+      "placement": "optional_small",
+      "latex": "g_i=\\mathrm{softmax}(r^{(h)}(z_i)),\\quad z_i=f_i"
+    },
+    {
+      "id": "eq_tree_mix",
+      "placement": "moe_panel_top",
+      "latex": "F_h(u_i)=\\sum_{\\ell\\in\\mathcal{L}}\\pi_i(\\ell)\\,f_\\ell^{(h)}(u_i),\\quad \\pi_i(\\ell)=\\prod_{(\\nu\\to c)\\in\\mathrm{path}(\\ell)} w_{i,\\nu\\to c}"
+    },
+    {
+      "id": "eq_topk_node",
+      "placement": "moe_panel_bottom",
+      "latex": "\\text{at each router }\\nu\\text{ with }b\\text{ children: }k=\\min(2,b);\\; w_i=\\mathrm{renorm}(\\mathrm{TopK}(g_i,k))"
+    },
+    {
+      "id": "eq_loss",
+      "placement": "output_loss",
+      "latex": "\\mathcal{L}=\\mathcal{L}_{rgb}+\\lambda_{op}\\mathcal{L}_{op}+\\lambda_{load}(t)\\mathcal{L}_{load}+\\lambda_{ent}(t)\\mathcal{L}_{ent}"
+    },
+    {
+      "id": "eq_rgb",
+      "placement": "footnote_ok",
+      "latex": "\\mathcal{L}_{rgb}=(1-\\lambda_{SSIM})\\mathcal{L}_1(\\hat{I},I)+\\lambda_{SSIM}\\mathcal{L}_{SSIM}(\\hat{I},I)+\\lambda_s\\mathbb{E}[\\prod_d s_d]"
+    }
+  ],
+  "stages": [
+    {
+      "id": "sfm",
+      "column": "input",
+      "label": "SfM Points",
+      "type": "image_panel",
+      "visual": {
+        "kind": "point_cloud_overlay",
+        "source_hint": "dataset SfM / COLMAP points (illustrative photo+dots OK)"
+      },
+      "outputs": ["anchors"]
+    },
+    {
+      "id": "anchors",
+      "column": "input",
+      "label": "Anchors",
+      "type": "schematic",
+      "math": "\\mathcal{A}=\\{(x_i,f_i)\\}_{i=1}^{N}",
+      "visual": {
+        "kind": "anchor_grid",
+        "description": "squares with center dots; dashed zoom from SfM"
+      },
+      "outputs": ["view_feature", "router_feature"]
+    },
+    {
+      "id": "view_feature",
+      "column": "moe",
+      "label": "View feature",
+      "type": "feature",
+      "math": "u_i=\\phi(f_i,d_i,\\ldots)",
+      "note": "view-conditioned; used as expert MLP input"
+    },
+    {
+      "id": "router_feature",
+      "column": "moe",
+      "label": "Router feature",
+      "type": "feature",
+      "math": "z_i=f_i",
+      "note": "anchor feature only; claimed model has no GNN"
+    },
+    {
+      "id": "attribute_heads",
+      "column": "moe",
+      "label": "Attribute heads",
+      "type": "stack",
+      "items": [
+        {"id": "head_opacity", "label": "opacity α", "symbol": "h=α"},
+        {"id": "head_cov", "label": "covariance Σ", "symbol": "h=Σ"},
+        {"id": "head_color", "label": "color c", "symbol": "h=c"}
+      ],
+      "note": "Each head has its own Tree MoE (own routers + expert leaves). Draw as three labeled chips, not color-coded by orange/green/blue."
+    },
+    {
+      "id": "tree_moe",
+      "column": "moe",
+      "label": "Growing Tree MoE",
+      "type": "tree",
+      "panel": true,
+      "state_shown": "stage_B_init",
+      "state_description": "Warm-start init: one root router with B=8 expert leaves (1:1 from flat MoE). Deeper trees appear only after optional growth (not shown in Fig.1).",
+      "nodes": [
+        {"id": "R0", "kind": "router", "label": "R", "depth": 0},
+        {"id": "E0", "kind": "expert", "label": "E0", "depth": 1, "parent": "R0"},
+        {"id": "E1", "kind": "expert", "label": "E1", "depth": 1, "parent": "R0"},
+        {"id": "E2", "kind": "expert", "label": "E2", "depth": 1, "parent": "R0", "on_topk": true},
+        {"id": "E3", "kind": "expert", "label": "E3", "depth": 1, "parent": "R0", "on_topk": true},
+        {"id": "E4", "kind": "expert", "label": "E4", "depth": 1, "parent": "R0"},
+        {"id": "E5", "kind": "expert", "label": "E5", "depth": 1, "parent": "R0"},
+        {"id": "E6", "kind": "expert", "label": "E6", "depth": 1, "parent": "R0"},
+        {"id": "E7", "kind": "expert", "label": "E7", "depth": 1, "parent": "R0"}
+      ],
+      "edges": [
+        {"from": "R0", "to": "E0", "style": "thin"},
+        {"from": "R0", "to": "E1", "style": "thin"},
+        {"from": "R0", "to": "E2", "style": "thick_topk"},
+        {"from": "R0", "to": "E3", "style": "thick_topk"},
+        {"from": "R0", "to": "E4", "style": "thin"},
+        {"from": "R0", "to": "E5", "style": "thin"},
+        {"from": "R0", "to": "E6", "style": "thin"},
+        {"from": "R0", "to": "E7", "style": "thin"}
+      ],
+      "drawing_tip": "If 8 leaves crowd the panel, draw root R with 8 leaf dots and highlight exactly two Top-2 edges; do not invent a deeper grown tree for Fig.1.",
+      "expert_icons": "optional small MLP grid beside highlighted leaves only"
+    },
+    {
+      "id": "topk_mix",
+      "column": "moe",
+      "label": "Top-k mix",
+      "type": "gate",
+      "params": {
+        "k": 2,
+        "scope": "per_router_over_children",
+        "after_curriculum": true,
+        "curriculum_Tw": 3000
+      },
+      "visual": {
+        "kind": "weight_bars",
+        "bars": [
+          {"id": "w_E2", "label": "π(E2)", "height": 0.6},
+          {"id": "w_E3", "label": "π(E3)", "height": 0.4}
+        ],
+        "note": "Show exactly k=2 bars for the selected children of the active router; not three flat-expert bars."
+      },
+      "aggregate": "oplus",
+      "math": "F_h(u_i)=\\sum_{\\ell\\in\\mathrm{support}} \\pi_i(\\ell)\\,f_\\ell^{(h)}(u_i)"
+    },
+    {
+      "id": "warm_start",
+      "column": "moe",
+      "label": "Warm-start from flat MoE",
+      "type": "badge",
+      "color": "warm_start",
+      "note": "Stage A: train flat MoE with E=8, Top-2. Stage B: copy experts+router into B=8 root leaves; densification off (update_until=0)."
+    },
+    {
+      "id": "predictions",
+      "column": "output",
+      "label": "Predictions",
+      "type": "gaussians",
+      "math": "(\\alpha_j, \\Sigma_j, c_j)",
+      "visual": {
+        "kind": "ellipses",
+        "description": "neural Gaussians from all three heads; do not color-code ellipses as opacity/cov/color experts"
+      }
+    },
+    {
+      "id": "rasterize",
+      "column": "output",
+      "label": "Rasterize",
+      "type": "op",
+      "math": "\\hat{I}=\\mathcal{R}(\\{(\\alpha_j,\\Sigma_j,c_j)\\})"
+    },
+    {
+      "id": "rendered",
+      "column": "output",
+      "label": "Rendered",
+      "type": "image_panel",
+      "source_hint": "model render of the same training camera used for L_rgb"
+    },
+    {
+      "id": "gt",
+      "column": "output",
+      "label": "Ground Truth",
+      "type": "image_panel",
+      "source_hint": "training-view ground-truth image I paired with the camera (not a test novel view)"
+    },
+    {
+      "id": "losses",
+      "column": "output",
+      "label": "Losses",
+      "type": "bidirectional",
+      "between": ["rendered", "gt"],
+      "math": "\\mathcal{L}_{rgb}+\\lambda_{op}\\mathcal{L}_{op}+\\lambda_{load}\\mathcal{L}_{load}+\\lambda_{ent}\\mathcal{L}_{ent}",
+      "components": [
+        {"id": "L_rgb", "name": "photometric + scale reg", "paper": "3.5"},
+        {"id": "L_op", "name": "opacity regularizer"},
+        {"id": "L_load", "name": "Switch load balancing"},
+        {"id": "L_ent", "name": "router entropy"}
+      ]
+    }
+  ],
+  "edges": [
+    {"from": "sfm", "to": "anchors", "style": "dashed_zoom"},
+    {"from": "anchors", "to": "view_feature", "style": "solid"},
+    {"from": "anchors", "to": "router_feature", "style": "solid"},
+    {"from": "view_feature", "to": "tree_moe", "style": "solid", "note": "u_i into expert MLPs"},
+    {"from": "router_feature", "to": "tree_moe", "style": "solid", "note": "z_i into routers"},
+    {"from": "attribute_heads", "to": "tree_moe", "style": "solid", "note": "three independent trees"},
+    {"from": "tree_moe", "to": "topk_mix", "style": "solid"},
+    {"from": "topk_mix", "to": "predictions", "style": "solid"},
+    {"from": "predictions", "to": "rasterize", "style": "solid"},
+    {"from": "rasterize", "to": "rendered", "style": "solid"},
+    {"from": "rendered", "to": "gt", "style": "bidirectional_loss"}
+  ],
+  "training_note": {
+    "include_in_figure": false,
+    "text": "Optional information-guided leaf growth (traffic, residual loss, feature heterogeneity; checks at 6k/10k/14k/18k; G_max=4) belongs in Sec. 3 / a supplemental figure — not Fig.1.",
+    "why": "Ablations show most PSNR gain already at grows=0 (warm-start); showing a grown tree in Fig.1 would oversell growth."
+  },
+  "exports": {
+    "mermaid_flowchart": "flowchart LR\n    sfm[/SfM Points/]\n    anchors[\"Anchors (x_i, f_i)\"]\n    viewFeat[\"View feature u_i\"]\n    routFeat[\"Router feature z_i=f_i\"]\n\n    subgraph treePanel [\"Growing Tree MoE (Stage-B init)\"]\n        direction TB\n        heads[\"Heads h in {opacity, cov, color}\"]\n        rootR((R))\n        leafE0((E0))\n        leafE1((E1))\n        leafE2((E2))\n        leafE3((E3))\n        leafE4((E4))\n        leafE5((E5))\n        leafE6((E6))\n        leafE7((E7))\n        topk[\"Per-router Top-2\"]\n        mix((oplus))\n        warm{{\"Warm-start from flat MoE E=8\"}}\n        rootR --> leafE0 & leafE1 & leafE4 & leafE5 & leafE6 & leafE7\n        rootR ==> leafE2 & leafE3\n        leafE2 --> topk\n        leafE3 --> topk\n        topk --> mix\n        heads -.-> rootR\n        warm -.-> rootR\n    end\n\n    pred[\"Neural Gaussians (alpha, Sigma, c)\"]\n    rend[Rendered]\n    gt[/Training-view GT/]\n\n    sfm --> anchors\n    anchors --> viewFeat\n    anchors --> routFeat\n    viewFeat --> rootR\n    routFeat --> rootR\n    mix --> pred\n    pred --> rend\n    rend <-->|\"L_rgb + L_op + L_load + L_ent\"| gt\n\n    style treePanel fill:#C2E5FF,stroke:#3DADFF\n    style rootR fill:#FFE0C2,stroke:#FF9E42\n    style leafE2 fill:#CDF4D3,stroke:#66D575\n    style leafE3 fill:#CDF4D3,stroke:#66D575\n    style warm fill:#DCCCFF,stroke:#874FFF\n    style topk fill:#FFE0C2,stroke:#FF9E42\n    style pred fill:#F5F5F5,stroke:#B3B3B3",
+    "png": "documents/method_summary/fig_overview_moe_tree.png",
+    "pdf": "documents/method_summary/fig_overview_moe_tree.pdf"
+  },
+  "figma": {
+    "tool": "generate_diagram",
+    "diagram_type": "flowchart",
+    "name": "CVPR Fig.1 Growing Tree MoE",
+    "userIntent": "FigJam overview from the corrected honest workflow JSON (Stage-B init tree, per-router Top-2, paper losses)",
+    "status": "mcp_not_connected",
+    "how_to_enable": "Cursor Settings → Tools & MCP → Figma (https://mcp.figma.com/mcp), then regenerate from exports.mermaid_flowchart"
+  }
+}

@@ -1,0 +1,10 @@
+scene,method,n_anchors,k,router_leaves,nmi_kmeans_router,run
+db/playroom,baseline,147280,3,,,/home/qiqi/Documents/Scaffold-GS-main/outputs/db/playroom/baseline/2026-08-14_14:37:41
+db/playroom,moe,128823,3,8,0.699,/home/qiqi/Documents/Scaffold-GS-main/outputs/db/playroom/moe/2026-08-14_14:50:11
+db/playroom,moe_tree,128823,3,10,0.479,/home/qiqi/Documents/Scaffold-GS-main/outputs/db/playroom/moe_tree/2026-08-14_15:06:48
+mipnerf360/kitchen,baseline,296496,3,,,/home/qiqi/Documents/Scaffold-GS-main/outputs/mipnerf360/kitchen/baseline/2026-08-14_06:46:28
+mipnerf360/kitchen,moe,297003,3,8,0.488,/home/qiqi/Documents/Scaffold-GS-main/outputs/mipnerf360/kitchen/moe/2026-08-14_07:12:20
+mipnerf360/kitchen,moe_tree,297003,3,11,0.324,/home/qiqi/Documents/Scaffold-GS-main/outputs/mipnerf360/kitchen/moe_tree/2026-08-14_08:01:54
+mipnerf360/bonsai,baseline,377766,3,,,/home/qiqi/Documents/Scaffold-GS-main/outputs/mipnerf360/bonsai/baseline/2026-08-14_01:01:11
+mipnerf360/bonsai,moe,364679,3,8,0.540,/home/qiqi/Documents/Scaffold-GS-main/outputs/mipnerf360/bonsai/moe/2026-08-14_01:21:11
+mipnerf360/bonsai,moe_tree,364679,3,11,0.417,/home/qiqi/Documents/Scaffold-GS-main/outputs/mipnerf360/bonsai/moe_tree/2026-08-14_02:01:45

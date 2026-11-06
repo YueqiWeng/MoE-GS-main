@@ -1,0 +1,57 @@
+% 3D-GS (Kerbl et al.) on every scene in this repo. ours_30000 from outputs/*/3dgs.
+\begin{table}[t]
+\centering
+\caption{Official 3D-GS trained on the same images, splits, and 30k-iteration protocol as our Scaffold-GS runs. Mip-NeRF 360 \textit{flowers} and \textit{treehill} are not in the public dataset dump.}
+\label{tab:3dgs_all}
+\setlength{\tabcolsep}{6pt}
+\begin{tabular}{lccc}
+\toprule
+Scene & PSNR$\uparrow$ & SSIM$\uparrow$ & LPIPS$\downarrow$ \\
+\midrule
+\multicolumn{4}{l}{\textit{Mip-NeRF 360}} \\
+bicycle & 25.17 & 0.747 & 0.242 \\
+bonsai & 32.50 & 0.948 & 0.180 \\
+counter & 29.18 & 0.916 & 0.182 \\
+garden & 27.37 & 0.857 & 0.122 \\
+kitchen & 31.22 & 0.931 & 0.116 \\
+room & 31.84 & 0.928 & 0.195 \\
+stump & 26.65 & 0.769 & 0.243 \\
+\textbf{Mean} & 29.13 & 0.871 & 0.183 \\
+\midrule
+\multicolumn{4}{l}{\textit{Tanks & Temples}} \\
+train & 21.94 & 0.820 & 0.197 \\
+truck & 25.47 & 0.885 & 0.141 \\
+\textbf{Mean} & 23.71 & 0.853 & 0.169 \\
+\midrule
+\multicolumn{4}{l}{\textit{Deep Blending}} \\
+drjohnson & 29.49 & 0.906 & 0.236 \\
+playroom & 30.09 & 0.908 & 0.241 \\
+\textbf{Mean} & 29.79 & 0.907 & 0.238 \\
+\midrule
+\multicolumn{4}{l}{\textit{NeRF-Synthetic}} \\
+chair & 35.73 & 0.988 & 0.010 \\
+drums & 26.29 & 0.955 & 0.036 \\
+ficus & 35.55 & 0.987 & 0.012 \\
+hotdog & 38.12 & 0.985 & 0.020 \\
+lego & 36.07 & 0.982 & 0.017 \\
+materials & 30.53 & 0.961 & 0.037 \\
+mic & 36.89 & 0.993 & 0.006 \\
+ship & 31.72 & 0.906 & 0.110 \\
+\textbf{Mean} & 33.86 & 0.970 & 0.031 \\
+\midrule
+\multicolumn{4}{l}{\textit{BungeeNeRF}} \\
+amsterdam & 25.44 & 0.842 & 0.221 \\
+barcelona & 26.03 & 0.866 & 0.182 \\
+bilbao & 26.77 & 0.875 & 0.177 \\
+chicago & 22.35 & 0.816 & 0.230 \\
+hollywood & 22.83 & 0.730 & 0.318 \\
+pompidou & 20.99 & 0.770 & 0.277 \\
+quebec & 28.36 & 0.913 & 0.180 \\
+rome & 22.45 & 0.833 & 0.233 \\
+\textbf{Mean} & 24.40 & 0.831 & 0.227 \\
+\midrule
+\textbf{Paper-19 mean} & 30.62 & 0.914 & 0.123 \\
+\textbf{All-27 mean} & 28.78 & 0.890 & 0.154 \\
+\bottomrule
+\end{tabular}
+\end{table}
