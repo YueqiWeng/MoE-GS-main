@@ -321,15 +321,23 @@ def plot_one_method_scene(ds: str, scene: str, method: str, run_dir: Path):
     plt.close(fig)
 
 
-def plot_scene_compare(ds: str, scene: str, runs: dict):
-    """One scene, three methods, color head only."""
-    fig = plt.figure(figsize=(11.8, 7.2))
+def plot_scene_compare(
+    ds: str,
+    scene: str,
+    runs: dict,
+    methods: list[str] | None = None,
+    extra_out: Path | None = None,
+):
+    """One scene, color head. Default: baseline | flat MoE | tree MoE."""
+    methods = list(methods) if methods else list(ALL_METHODS)
+    n = len(methods)
+    fig = plt.figure(figsize=(4.05 * n + 1.15, 7.2))
     gs = fig.add_gridspec(
         3,
-        4,
-        width_ratios=[1, 1, 1, 0.045],
+        n + 1,
+        width_ratios=[1] * n + [0.05],
         height_ratios=[1.05, 1.45, 0.95],
-        left=0.07,
+        left=0.08,
         right=0.97,
         top=0.84,
         bottom=0.09,
@@ -338,11 +346,11 @@ def plot_scene_compare(ds: str, scene: str, runs: dict):
     )
 
     psnrs = []
-    for m in ALL_METHODS:
+    for m in methods:
         p = load_psnr(runs[(ds, scene, m)]) if (ds, scene, m) in runs else None
         psnrs.append(f"{METHOD_LABELS[m]} {p:.2f}" if p is not None else METHOD_LABELS[m])
-    fig.text(0.07, 0.955, f"{scene}", fontsize=15, fontweight="bold")
-    fig.text(0.07, 0.912, "color head  ·  PSNR  " + "   ·   ".join(psnrs), fontsize=9.5, color="#555555")
+    fig.text(0.08, 0.955, f"{scene}", fontsize=15, fontweight="bold")
+    fig.text(0.08, 0.912, "color head  ·  PSNR  " + "   ·   ".join(psnrs), fontsize=9.5, color="#555555")
     fig.text(0.97, 0.955, ds, fontsize=10, color="#888888", ha="right")
 
     packed = {}
@@ -362,7 +370,7 @@ def plot_scene_compare(ds: str, scene: str, runs: dict):
     moe_vmax = min(0.40, moe_vmax * 1.08)
 
     last_im = None
-    for col, method in enumerate(ALL_METHODS):
+    for col, method in enumerate(methods):
         if method not in packed:
             continue
         data = packed[method]
@@ -430,7 +438,7 @@ def plot_scene_compare(ds: str, scene: str, runs: dict):
                 color="#555555",
             )
 
-    cax = fig.add_subplot(gs[1, 3])
+    cax = fig.add_subplot(gs[1, n])
     if last_im is not None:
         cb = fig.colorbar(last_im, cax=cax)
         cb.set_label("mass", fontsize=8)
@@ -440,6 +448,10 @@ def plot_scene_compare(ds: str, scene: str, runs: dict):
     out = OUT / "by_scene" / ds
     out.mkdir(parents=True, exist_ok=True)
     fig.savefig(out / f"{scene}.png")
+    if extra_out is not None:
+        extra_out.parent.mkdir(parents=True, exist_ok=True)
+        fig.savefig(extra_out)
+        print("wrote", extra_out)
     plt.close(fig)
 
 
@@ -555,6 +567,135 @@ def plot_suite_mass(ds: str, scenes: list[str], runs: dict):
     cb.ax.tick_params(labelsize=7, length=2)
     fig.savefig(OUT / f"{ds}__final_util_heatmap.png")
     plt.close(fig)
+
+
+SUITE_LABELS = {
+    "mipnerf360": "Mip-NeRF 360",
+    "tandt": "Tanks & Temples",
+    "db": "Deep Blending",
+    "nerfsynthetic": "NeRF-Synthetic",
+}
+
+
+def plot_all_datasets_routing(runs: dict):
+    """Paper figure: final color-leaf mass heatmap for every suite in SUITES."""
+    order = []
+    for ds, scenes in SUITES.items():
+        for scene in scenes:
+            if (ds, scene, "moe") in runs and (ds, scene, "moe_tree") in runs:
+                order.append((ds, scene))
+    if not order:
+        print("skip all-datasets routing figure (no runs)")
+        return
+
+    util = {"moe": [], "moe_tree": []}
+    nleaf = {"moe": 1, "moe_tree": 1}
+    for ds, scene in order:
+        for method in ("moe", "moe_tree"):
+            fh = final_head(load(runs[(ds, scene, method)] / "routing_analysis.json"), "color")
+            u = np.array(fh["util"], dtype=float)
+            util[method].append(u)
+            nleaf[method] = max(nleaf[method], len(u))
+
+    stacked = {}
+    for method in ("moe", "moe_tree"):
+        m = np.full((len(order), nleaf[method]), np.nan)
+        for i, u in enumerate(util[method]):
+            m[i, : len(u)] = u
+        stacked[method] = m
+
+    fig = plt.figure(figsize=(9.6, 6.4))
+    gs = fig.add_gridspec(
+        1,
+        3,
+        width_ratios=[nleaf["moe"], nleaf["moe_tree"], 0.07],
+        left=0.14,
+        right=0.92,
+        top=0.86,
+        bottom=0.10,
+        wspace=0.10,
+    )
+    ax_flat = fig.add_subplot(gs[0, 0])
+    ax_tree = fig.add_subplot(gs[0, 1])
+    cax = fig.add_subplot(gs[0, 2])
+
+    fig.text(0.14, 0.955, "Final color-leaf routing mass", fontsize=13, fontweight="bold")
+    fig.text(
+        0.14,
+        0.915,
+        "flat MoE (8 leaves) vs tree MoE  ·  19 scenes",
+        fontsize=9,
+        color="#555555",
+    )
+
+    last_im = None
+    for ax, method in ((ax_flat, "moe"), (ax_tree, "moe_tree")):
+        last_im = ax.imshow(
+            stacked[method],
+            aspect="auto",
+            cmap=MASS_CMAP,
+            vmin=0,
+            vmax=0.45,
+            interpolation="nearest",
+        )
+        ax.set_title(METHOD_LABELS[method], color=METHOD_COLORS[method], fontweight="bold", pad=8)
+        ax.set_xticks(range(nleaf[method]))
+        ax.set_xticklabels([str(i) for i in range(nleaf[method])], fontsize=8)
+        ax.set_xlabel("leaf")
+        for s in ax.spines.values():
+            s.set_visible(True)
+            s.set_linewidth(0.5)
+            s.set_color("#CCCCCC")
+        ax.tick_params(length=2)
+        acc = 0
+        for ds, scenes in SUITES.items():
+            n = sum(1 for d, _ in order if d == ds)
+            if not n:
+                continue
+            if acc > 0:
+                ax.axhline(acc - 0.5, color="#FFFFFF", lw=2.0, zorder=3)
+            acc += n
+
+    ax_flat.set_yticks(range(len(order)))
+    ax_flat.set_yticklabels([scene for _, scene in order])
+    ax_tree.set_yticks(range(len(order)))
+    ax_tree.tick_params(labelleft=False)
+
+    acc = 0
+    short = {
+        "mipnerf360": "Mip-NeRF 360",
+        "tandt": "T&T",
+        "db": "DB",
+        "nerfsynthetic": "NeRF-Synthetic",
+    }
+    for ds, scenes in SUITES.items():
+        n = sum(1 for d, _ in order if d == ds)
+        if not n:
+            continue
+        ax_flat.text(
+            -0.28,
+            acc + (n - 1) / 2,
+            short[ds],
+            transform=ax_flat.get_yaxis_transform(),
+            ha="right",
+            va="center",
+            fontsize=7.5,
+            color="#888888",
+            rotation=90,
+            clip_on=False,
+        )
+        acc += n
+
+    cb = fig.colorbar(last_im, cax=cax)
+    cb.set_label("mass", fontsize=8)
+    cb.outline.set_visible(False)
+    cb.ax.tick_params(labelsize=7, length=2)
+
+    out = OUT / "all_datasets__routing"
+    fig.savefig(out.with_suffix(".png"), dpi=220)
+    fig.savefig(out.with_suffix(".pdf"))
+    plt.close(fig)
+    print("wrote", out.with_suffix(".png"))
 
 
 def plot_summary(runs: dict):
@@ -878,6 +1019,7 @@ def main():
         plot_suite_entropy(ds, scenes, runs)
         plot_suite_mass(ds, scenes, runs)
     plot_summary(runs)
+    plot_all_datasets_routing(runs)
     plot_ablate_tree_grows()
     write_metrics_csv(runs)
     write_index(runs)

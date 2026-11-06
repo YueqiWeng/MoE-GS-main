@@ -24,7 +24,21 @@ Dynamic tree topology over training (ASCII): see [tree_growth_txt/INDEX.md](tree
 
 Conceptual growth mechanism (ASCII): [tree_growth_concept.txt](tree_growth_concept.txt) · **Detailed (all branches):** [tree_growth_concept_detailed.txt](tree_growth_concept_detailed.txt) · PNG: [tree_growth_concept_detailed.png](tree_growth_concept_detailed.png)
 
+## Anchor feature clustering (Scaffold-GS Fig. 6 protocol)
+
+K-means \(K=3\) on stored \(f_v\in\mathbb{R}^{32}\), anchors colored in 3D. Same scene as Lu et al.\ (`playroom`) plus `kitchen` / `bonsai`. Script: `scripts/plot_anchor_feature_clustering.py`.
+
+<img src="anchor_feature_clustering.png" width="920" alt="anchor feature clustering">
+
+**Figure.** Floor/wall vs furniture groups survive MoE training. NMI(k-means, color router): flat MoE 0.70 / 0.49 / 0.54, tree 0.48 / 0.32 / 0.42 (playroom / kitchen / bonsai).
+
 ## Suite summaries
+
+### All datasets — paper routing figure
+
+<img src="all_datasets__routing.png" width="920" alt="all datasets routing">
+
+**Figure.** Final color-leaf routing mass on every scene in this project (19: Mip-NeRF 360, Tanks & Temples, Deep Blending, NeRF-Synthetic). Left: flat MoE (8 experts), often peaked on 1–2 leaves. Right: tree MoE (11 leaves); mass spreads after splits and some parent leaves go empty.
 
 ### All scenes — final color-head metrics
 

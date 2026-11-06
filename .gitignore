@@ -1,13 +1,32 @@
+# Project / local
 thirdparty/*
 !thirdparty/.placeholder
-
+third_party/gaussian-splatting
 test/
 temp/
+temp*
+outputs*
+output
+debug*
+log*
+view*
+wandb*
+*.bak
+data
+downloads
+sweep_logs
+*.zip
+*.tar
+*.tar.gz
+*build/*
+.vscode
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
+*__pycache__*
 *.py[cod]
 *$py.class
+*.pyc
 
 # C extensions
 *.so
@@ -32,8 +51,8 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
-output
 build
+
 diff_rasterization/diff_rast.egg-info
 diff_rasterization/dist
 tensorboard_3d

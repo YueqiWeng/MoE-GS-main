@@ -2,6 +2,7 @@
 # Sweep the three canonical methods across dataset suites.
 #
 # Methods:
+#   3dgs      — official 3D Gaussian Splatting (Kerbl et al. 2023)
 #   baseline  — Scaffold-GS shared MLP
 #   moe       — flat MoE
 #   moe_gnn   — MoE + GNN (needs moe ckpt)
@@ -10,17 +11,24 @@
 #
 # Usage:
 #   bash sweep.sh --suite mip360 -g 0
+#   bash sweep.sh --suite paper --methods 3dgs --skip-done -g 0
+#   bash sweep.sh --suite all --methods 3dgs --skip-done -g 0
 #   bash sweep.sh --suite mip360 --methods moe,moe_tree,moe_gnn,tree_gnn -g 0
 #   bash sweep.sh --suite mip360 --skip-done -g 0
 #   bash sweep.sh --suite ablate-tree --tree-grows 0,2,4 -g 0
 #   bash sweep.sh --suite ablate-components --ablate-components nocl,noload,nowarm -g 0
 #   bash sweep.sh --suite ablate-components-quick --ablate-components nocl,noload,nowarm -g 0
+#   bash sweep.sh --suite paper --lambda-loads 0.001,0.01,0.05 --skip-done -g 0
 #
 # Component ablations (moe_tree full model, no GNN):
 #   nocl    — moe_warmup=0
 #   noload  — lambda_load=0
 #   nowarm  — --no_warm_start
 #   noopac  — lambda_opacity=0  (optional)
+#
+# lambda_load sensitivity (warm-started moe_tree):
+#   --lambda-loads 0.001,0.01,0.05
+#   folders: outputs/<scene>/ablate_load_<tag>/  (0.001 → ablate_load_0p001)
 #
 # Logs: sweep_logs/sweep_<timestamp>.log
 
@@ -39,6 +47,7 @@ CONTINUE_ON_ERROR=1
 ITERATIONS=""
 TREE_GROWS_CSV=""
 ABLATE_COMPONENTS_CSV=""
+LAMBDA_LOADS_CSV=""
 
 while [[ "$#" -gt 0 ]]; do
     case $1 in
@@ -48,12 +57,13 @@ while [[ "$#" -gt 0 ]]; do
         --methods) METHODS_CSV="$2"; shift ;;
         --tree-grows) TREE_GROWS_CSV="$2"; shift ;;
         --ablate-components) ABLATE_COMPONENTS_CSV="$2"; shift ;;
+        --lambda-loads) LAMBDA_LOADS_CSV="$2"; shift ;;
         --skip-done) SKIP_DONE=1 ;;
         --dry-run) DRY_RUN=1 ;;
         --stop-on-error) CONTINUE_ON_ERROR=0 ;;
         --iterations) ITERATIONS="$2"; shift ;;
         -h|--help)
-            sed -n '2,22p' "$0"
+            sed -n '2,35p' "$0"
             exit 0 ;;
         *) echo "Unknown arg: $1"; exit 1 ;;
     esac
@@ -350,6 +360,76 @@ run_component_ablate() {
     return 0
 }
 
+# Folder tag for a float: 0.001 → 0p001, 0.05 → 0p05, 0 → 0
+lambda_load_tag() {
+    local v="$1"
+    echo "$v" | sed 's/\./p/g'
+}
+
+ablate_lambda_load_done() {
+    local scene="$1" tag="$2"
+    local dir="outputs/${scene}/ablate_load_${tag}"
+    [[ -d "$dir" ]] || return 1
+    find "$dir" -name results.json 2>/dev/null | grep -q .
+}
+
+# Sensitivity on lambda_load for warm-started moe_tree (no GNN).
+run_lambda_load_ablate() {
+    local scene="$1" lam="$2"
+    local hp vsize init_factor lod ckpt tag
+    hp="$(scene_hparams "$scene")"
+    read -r vsize init_factor lod <<< "$hp"
+    tag="$(lambda_load_tag "$lam")"
+
+    if [[ "$SKIP_DONE" -eq 1 ]] && ablate_lambda_load_done "$scene" "$tag"; then
+        log "[skip-done] $scene / ablate_load_${tag}"
+        return 0
+    fi
+
+    ckpt="$(latest_moe_ckpt "$scene")"
+    if [[ -z "$ckpt" ]]; then
+        log "[error] no flat MoE ckpt for $scene; run --method moe first"
+        return 1
+    fi
+
+    local extra=(
+        -d "$scene" -g "$GPU"
+        --voxel_size "$vsize" --update_init_factor "$init_factor" --lod "$lod"
+        -l "ablate_load_${tag}"
+        --lambda_load "$lam"
+        --start_baseline_mlp "$ckpt"
+    )
+    if [[ -n "$ITERATIONS" ]]; then
+        extra+=( --iterations "$ITERATIONS" )
+    fi
+
+    log ""
+    log "========================================"
+    log "[$(date '+%F %T')] moe_tree ablate  lambda_load=${lam}  on  ${scene}"
+    log "[from] ${ckpt}"
+    log "========================================"
+
+    if [[ "$DRY_RUN" -eq 1 ]]; then
+        log "DRY: bash train_method.sh --method moe_tree ${extra[*]}"
+        return 0
+    fi
+
+    set +e
+    bash train_method.sh --method moe_tree "${extra[@]}" 2>&1 | tee -a "$LOG"
+    local rc=${PIPESTATUS[0]}
+    set -e
+
+    if [[ "$rc" -ne 0 ]]; then
+        log "[FAIL] ablate_load_${tag} on $scene  exit=$rc"
+        if [[ "$CONTINUE_ON_ERROR" -eq 0 ]]; then
+            return "$rc"
+        fi
+    else
+        log "[OK] ablate_load_${tag} on $scene"
+    fi
+    return 0
+}
+
 run_one() {
     local scene="$1" method="$2"
     local hp vsize init_factor lod
@@ -363,6 +443,8 @@ run_one() {
 
     local method_flag=""
     case "$method" in
+        3dgs|3d-gs|3d_gs|gaussian_splatting|gaussian-splatting)
+            method_flag="3dgs"; method="3dgs" ;;
         baseline|scaffold|scaffold-gs)
             method_flag="baseline"; method="baseline" ;;
         moe|flat_moe|flat-moe)
@@ -404,7 +486,7 @@ run_one() {
             fi
             ;;
         *)
-            log "[error] unknown method: $method (use: baseline,moe,moe_gnn,moe_tree,tree_gnn)"
+            log "[error] unknown method: $method (use: 3dgs,baseline,moe,moe_gnn,moe_tree,tree_gnn)"
             return 1
             ;;
     esac
@@ -444,8 +526,9 @@ write_summary() {
     python3 - "$SUMMARY" <<'PY'
 import glob, json, os, sys
 out_path = sys.argv[1]
-methods = ["baseline", "moe", "moe_gnn", "moe_tree", "tree_gnn"]
+methods = ["3dgs", "baseline", "moe", "moe_gnn", "moe_tree", "tree_gnn"]
 method_aliases = {
+    "3dgs": "3D-GS",
     "baseline": "baseline",
     "moe": "moe",
     "moe_gnn": "MoE+GNN",
@@ -504,6 +587,9 @@ if [[ -n "$TREE_GROWS_CSV" ]]; then
 elif [[ -n "$ABLATE_COMPONENTS_CSV" ]]; then
     IFS=',' read -r -a ABLATE_COMPONENTS <<< "$ABLATE_COMPONENTS_CSV"
     log "Sweep start  component ablation  comps=${ABLATE_COMPONENTS_CSV}  gpu=$GPU"
+elif [[ -n "$LAMBDA_LOADS_CSV" ]]; then
+    IFS=',' read -r -a LAMBDA_LOADS <<< "$LAMBDA_LOADS_CSV"
+    log "Sweep start  lambda_load sensitivity  loads=${LAMBDA_LOADS_CSV}  gpu=$GPU"
 else
     log "Sweep start  suite=$SUITE  methods=${METHODS_CSV}  gpu=$GPU"
 fi
@@ -534,6 +620,21 @@ elif [[ -n "$ABLATE_COMPONENTS_CSV" ]]; then
         for comp in "${ABLATE_COMPONENTS[@]}"; do
             if ! run_component_ablate "$scene" "$comp"; then
                 log "[fail] $scene / ablate_${comp}"
+                if [[ "$CONTINUE_ON_ERROR" -eq 0 ]]; then
+                    exit 1
+                fi
+            fi
+        done
+    done
+elif [[ -n "$LAMBDA_LOADS_CSV" ]]; then
+    for scene in "${SCENES[@]}"; do
+        if ! scene_exists "$scene"; then
+            log "[skip] missing data: $scene"
+            continue
+        fi
+        for lam in "${LAMBDA_LOADS[@]}"; do
+            if ! run_lambda_load_ablate "$scene" "$lam"; then
+                log "[fail] $scene / ablate_load_$(lambda_load_tag "$lam")"
                 if [[ "$CONTINUE_ON_ERROR" -eq 0 ]]; then
                     exit 1
                 fi

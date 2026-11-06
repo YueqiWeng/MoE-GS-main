@@ -2,6 +2,8 @@
 # =============================================================================
 # Methods:
 #
+#   3dgs       Official 3D Gaussian Splatting (Kerbl et al., TOG 2023).
+#              External code: third_party/gaussian-splatting (cloned on first run).
 #   baseline   Scaffold-GS (shared MLP)
 #   moe        Flat MoE (8 experts, Top-2). No GNN.
 #   moe_gnn    MoE + GNN: warm-start from finished `moe`, keep MoE points,
@@ -11,6 +13,7 @@
 #   tree_gnn   Growing Tree MoE + GNN: same grow recipe as moe_tree, with GNN.
 #
 # Usage:
+#   bash train_method.sh --method 3dgs     -d mipnerf360/kitchen -g 0
 #   bash train_method.sh --method baseline -d mipnerf360/kitchen -g 0
 #   bash train_method.sh --method moe      -d mipnerf360/kitchen -g 0
 #   bash train_method.sh --method moe_gnn  -d mipnerf360/kitchen -g 0
@@ -86,7 +89,7 @@ add_cov_dist=""
 add_color_dist=""
 
 usage() {
-    sed -n '2,20p' "$0"
+    sed -n '2,24p' "$0"
     exit 1
 }
 
@@ -133,6 +136,7 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 case "${method}" in
+    3dgs|3d-gs|3d_gs|gaussian_splatting|gaussian-splatting) method=3dgs ;;
     baseline|scaffold|scaffold-gs|scaffold_gs) method=baseline ;;
     moe|flat_moe|flat-moe) method=moe ;;
     moe_gnn|moe+gnn|moe-gnn|moe_then_gnn|moe_gnn_frozen|gnn_frozen) method=moe_gnn ;;
@@ -143,12 +147,12 @@ case "${method}" in
         usage ;;
     *)
         echo "[error] unknown method: ${method}"
-        echo "        expected: baseline | moe | moe_gnn | moe_tree | tree_gnn"
+        echo "        expected: 3dgs | baseline | moe | moe_gnn | moe_tree | tree_gnn"
         exit 1 ;;
 esac
 
 if [[ -z "${data}" ]]; then
-    echo "Usage: bash train_method.sh --method <baseline|moe|moe_gnn|moe_tree|tree_gnn> -d <dataset> -g <gpu>"
+    echo "Usage: bash train_method.sh --method <3dgs|baseline|moe|moe_gnn|moe_tree|tree_gnn> -d <dataset> -g <gpu>"
     exit 1
 fi
 
@@ -233,6 +237,12 @@ keep_moe_points() {
 }
 
 case "${method}" in
+    3dgs)
+        echo "[method] 3dgs = official 3D Gaussian Splatting (Kerbl et al., TOG 2023)"
+        echo "[note]   external trainer; Scaffold-GS voxel/lod/appearance flags are ignored"
+        python scripts/train_3dgs.py -d "${data}" -g "${gpu}" -l "${logdir}" --iterations "${iterations}"
+        ;;
+
     baseline)
         echo "[method] baseline = Scaffold-GS (shared MLP)"
         python train.py "${common_args[@]}" --num_experts 1

@@ -389,9 +389,13 @@ Almost all improvement over flat MoE is already present at **grows=0** (warm-sta
 
 Approximate wall-clock (mean over measured runs): baseline \(16\) min, flat MoE \(31\) min, Tree MoE \(41\) min (~**2.6×** baseline). Peak GPU memory remains comparable to flat MoE (~4 GB class on representative scenes).
 
-### 5.6 Qualitative / routing
+### 5.6 Routing analysis
 
-Routing dumps show color-head trees evolving from 8 flat leaves to 10–11 leaves under grows=2/4, with mass concentrating on children of split nodes (e.g. kitchen grows=2: splits of \(L6\_7\) then \(L0\_1\)). Sample gate entropy stays low under Top-2; utilization CV rises as parents split.
+We log per-leaf gate mass on the color head at the end of training (Fig.~X). Each row is one of the 19 evaluation scenes; each column is a leaf. Flat MoE uses a fixed set of 8 experts. On several scenes the router collapses onto one or two of them (`room`, `bonsai`, `ficus`, `hotdog`), so most of the decoder capacity is unused. Tree MoE starts from the same 8 experts and is allowed up to four binary splits, producing up to 11 leaves. After a split the parent stops receiving mass and the two children inherit it, which appears as white (empty) cells next to newly occupied leaves. The resulting assignment is more spread out than the flat router: hard regions keep dedicated specialists, while easy mass is not forced through a single overloaded expert. This does not contradict the grow-count ablation in Sec.~5.4: most of the PSNR gain is already present at \(G_{\max}=0\) (warm-start plus continued tree training). Growth is a *capacity reallocation* mechanism that makes specialization visible and, on some scenes, slightly stronger; it is not the main source of the mean \(+0.30\)~dB over flat MoE.
+
+### 5.7 Anchor feature clustering
+
+We follow Scaffold-GS Fig.~6 on Deep Blending `playroom` (K-means \(K=3\), primitives colored in 3D). 3D-GS has no \(f_v\): we cluster SH coefficients of each Gaussian. Scaffold-GS / MoE / Tree cluster the stored \(f_v\in\mathbb{R}^{32}\). 3D-GS clusters mix across the room. Scaffold-GS already separates floor from furniture. **Tree MoE is the most spatially coherent** (compact blue floor vs orange structure). Figure: `documents/method_summary/routing/anchor_feature_clustering.png`.
 
 ---
 

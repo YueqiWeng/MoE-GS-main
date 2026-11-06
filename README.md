@@ -89,6 +89,32 @@ To setup dataset preprocessing environment, run scrips:
 
 Please refer [STG](https://github.com/oppo-us-research/SpacetimeGaussians.git) for further information.
 
+### Public Data (Scaffold / Tree-MoE experiments)
+
+The BungeeNeRF dataset is available in [Google Drive](https://drive.google.com/file/d/1nBLcf9Jrr6sdxKa1Hbd47IArQQ_X8lww/view?usp=sharing)/[百度网盘[提取码:4whv]](https://pan.baidu.com/s/1AUYUJojhhICSKO2JrmOnCA). The MipNeRF360 scenes are provided by the paper author [here](https://jonbarron.info/mipnerf360/). And we test on scenes ```bicycle, bonsai, counter, garden, kitchen, room, stump```. The SfM data sets for Tanks&Temples and Deep Blending are hosted by 3D-Gaussian-Splatting [here](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/datasets/input/tandt_db.zip). Download and uncompress them into the ```data/``` folder.
+
+### Custom Data
+
+For custom data, you should process the image sequences with [Colmap](https://colmap.github.io/) to obtain the SfM points and camera poses. Then, place the results into ```data/``` folder.
+
+
+## Training (Scaffold / Tree-MoE)
+
+```bash
+# Single scene
+bash train_method.sh --method 3dgs     -d mipnerf360/kitchen -g 0   # Kerbl et al. 2023
+bash train_method.sh --method baseline -d mipnerf360/kitchen -g 0
+bash train_method.sh --method moe      -d mipnerf360/kitchen -g 0
+bash train_method.sh --method moe_gnn  -d mipnerf360/kitchen -g 0   # needs moe
+bash train_method.sh --method moe_tree -d mipnerf360/kitchen -g 0   # needs moe
+bash train_method.sh --method tree_gnn -d mipnerf360/kitchen -g 0   # needs moe
+
+# Full suite (skip finished runs)
+bash sweep.sh --suite mip360 --skip-done -g 0
+bash sweep.sh --suite all --methods 3dgs --skip-done -g 0
+bash sweep.sh --suite mip360 --methods moe,moe_tree,moe_gnn,tree_gnn -g 0
+```
+
 <br><br>
 
 ## Stage 1: Expert Training
