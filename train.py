@@ -64,6 +64,7 @@ def create_gaussian_model(dataset):
         getattr(dataset, "moe_grow_factor", 0),
         getattr(dataset, "moe_max_total_grows", 64),
         getattr(dataset, "gnn_gamma_init", 0.5),
+        getattr(dataset, "mlp_depth", 2),
     )
 
 try:

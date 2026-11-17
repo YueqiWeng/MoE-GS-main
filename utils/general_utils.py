@@ -14,44 +14,17 @@ import sys
 from datetime import datetime
 import numpy as np
 import random
-import cv2
 
 def inverse_sigmoid(x):
     return torch.log(x/(1-x))
 
-
-def PILtoTorch(pil_image, resolution, resample=2): # bilinear interpolation
-    resized_image_PIL = pil_image.resize(resolution, resample=resample)
+def PILtoTorch(pil_image, resolution):
+    resized_image_PIL = pil_image.resize(resolution)
     resized_image = torch.from_numpy(np.array(resized_image_PIL)) / 255.0
     if len(resized_image.shape) == 3:
         return resized_image.permute(2, 0, 1)
     else:
         return resized_image.unsqueeze(dim=-1).permute(2, 0, 1)
-
-
-def load_depth(invdepth_path, resolution): # bilinear interpolation
-    invdepth = cv2.imread(invdepth_path, -1).astype(np.float32)
-    invdepth = cv2.resize(
-        invdepth, resolution, interpolation=cv2.INTER_AREA)
-    return torch.from_numpy(invdepth)
-    
-# resolution (w, h)
-def read_opticalflow(opticalflow_path, resolution):
-    encoded_flow = cv2.imread(opticalflow_path, cv2.IMREAD_UNCHANGED)
-    flow_scale = resolution[1] / encoded_flow.shape[0] 
-    encoded_flow = cv2.resize(
-        encoded_flow, resolution, interpolation=cv2.INTER_AREA)
-    flow, mask = decode_flow(encoded_flow)
-    flow = flow * flow_scale
-    return flow, mask
-
-    
-def decode_flow(encoded_flow):
-    flow = encoded_flow[..., :2].astype(np.float32)
-    flow -= 2**15
-    flow /= 2**8
-    return flow, (encoded_flow[..., 2] > 2**15).astype(np.float32)
-
 
 def get_expon_lr_func(
     lr_init, lr_final, lr_delay_steps=0, lr_delay_mult=1.0, max_steps=1000000
@@ -87,7 +60,6 @@ def get_expon_lr_func(
         return delay_rate * log_lerp
 
     return helper
-
 
 def strip_lowerdiag(L):
     uncertainty = torch.zeros((L.shape[0], 6), dtype=torch.float, device="cuda")
@@ -158,16 +130,4 @@ def safe_state(silent):
     random.seed(0)
     np.random.seed(0)
     torch.manual_seed(0)
-    torch.cuda.set_device(torch.device(0))
-
-class MultipleOptimizer(object):
-    def __init__(self, *op):
-        self.optimizers = op
-
-    def zero_grad(self):
-        for op in self.optimizers:
-            op.zero_grad()
-
-    def step(self):
-        for op in self.optimizers:
-            op.step()
+    torch.cuda.set_device(torch.device("cuda:0"))

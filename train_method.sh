@@ -8,17 +8,20 @@
 #   moe        Flat MoE (8 experts, Top-2). No GNN.
 #   moe_gnn    MoE + GNN: warm-start from finished `moe`, keep MoE points,
 #              add dual GNN router, train another 30k.
+#   moe_continue  Flat MoE +30k from finished `moe` (keep points, update_until=0).
+#                 Control for "extra training" vs tree (cf. ablate_grows0).
 #   moe_tree   Growing Tree MoE (no GNN): warm-start from `moe`, keep MoE
 #              points, start 8 leaves (1:1 MoE), grow hard leaves (color-first).
 #   tree_gnn   Growing Tree MoE + GNN: same grow recipe as moe_tree, with GNN.
 #
 # Usage:
-#   bash train_method.sh --method 3dgs     -d mipnerf360/kitchen -g 0
-#   bash train_method.sh --method baseline -d mipnerf360/kitchen -g 0
-#   bash train_method.sh --method moe      -d mipnerf360/kitchen -g 0
-#   bash train_method.sh --method moe_gnn  -d mipnerf360/kitchen -g 0
-#   bash train_method.sh --method moe_tree -d mipnerf360/kitchen -g 0
-#   bash train_method.sh --method tree_gnn -d mipnerf360/kitchen -g 0
+#   bash train_method.sh --method 3dgs         -d mipnerf360/kitchen -g 0
+#   bash train_method.sh --method baseline     -d mipnerf360/kitchen -g 0
+#   bash train_method.sh --method moe          -d mipnerf360/kitchen -g 0
+#   bash train_method.sh --method moe_continue -d mipnerf360/kitchen -g 0
+#   bash train_method.sh --method moe_gnn      -d mipnerf360/kitchen -g 0
+#   bash train_method.sh --method moe_tree     -d mipnerf360/kitchen -g 0
+#   bash train_method.sh --method tree_gnn     -d mipnerf360/kitchen -g 0
 #
 # Ablation knobs (mostly for moe / moe_tree):
 #   --moe_warmup 0              # w/o curriculum (Top-k from start)
@@ -27,6 +30,7 @@
 #   --lambda_router_entropy 0   # w/o entropy regularizer
 #   --no_warm_start             # moe_tree without flat-MoE init
 #   --num_experts N --moe_top_k K
+#   --tree_grow_force           # force a grow when gates fail
 # =============================================================================
 
 set -euo pipefail
@@ -52,6 +56,7 @@ update_until=""
 
 num_experts=8
 moe_top_k=2
+mlp_depth=2
 moe_warmup=3000
 lambda_load=0.005
 lambda_router_entropy=0.002
@@ -79,6 +84,7 @@ tree_grow_min_neff=1.1
 tree_grow_min_mass_frac=0.12
 tree_grow_min_loss_ratio=0.95
 tree_grow_dense_iters=1500
+tree_grow_force=0
 
 start_baseline_mlp=""
 start_gaussian_ply=""
@@ -120,6 +126,7 @@ while [[ "$#" -gt 0 ]]; do
         --add_color_dist) add_color_dist="--add_color_dist" ;;
         --num_experts) num_experts="$2"; shift ;;
         --moe_top_k) moe_top_k="$2"; shift ;;
+        --mlp_depth) mlp_depth="$2"; shift ;;
         --moe_warmup) moe_warmup="$2"; shift ;;
         --lambda_load) lambda_load="$2"; shift ;;
         --lambda_opacity) lambda_opacity="$2"; shift ;;
@@ -129,6 +136,11 @@ while [[ "$#" -gt 0 ]]; do
         --tree_grow_interval) tree_grow_interval="$2"; shift ;;
         --tree_grow_stop) tree_grow_stop="$2"; shift ;;
         --tree_grow_dense_iters) tree_grow_dense_iters="$2"; shift ;;
+        --tree_grow_min_score_ratio) tree_grow_min_score_ratio="$2"; shift ;;
+        --tree_grow_min_neff) tree_grow_min_neff="$2"; shift ;;
+        --tree_grow_min_mass_frac) tree_grow_min_mass_frac="$2"; shift ;;
+        --tree_grow_min_loss_ratio) tree_grow_min_loss_ratio="$2"; shift ;;
+        --tree_grow_force) tree_grow_force=1 ;;
         -h|--help) usage ;;
         *) echo "Unknown parameter: $1"; usage ;;
     esac
@@ -139,6 +151,7 @@ case "${method}" in
     3dgs|3d-gs|3d_gs|gaussian_splatting|gaussian-splatting) method=3dgs ;;
     baseline|scaffold|scaffold-gs|scaffold_gs) method=baseline ;;
     moe|flat_moe|flat-moe) method=moe ;;
+    moe_continue|continue_moe|moe+continue) method=moe_continue ;;
     moe_gnn|moe+gnn|moe-gnn|moe_then_gnn|moe_gnn_frozen|gnn_frozen) method=moe_gnn ;;
     moe_tree|tree|tree_moe|growing_tree) method=moe_tree ;;
     tree_gnn|dynamic_gnn|dynamic_tree_moe_gnn|tree+gnn) method=tree_gnn ;;
@@ -147,12 +160,12 @@ case "${method}" in
         usage ;;
     *)
         echo "[error] unknown method: ${method}"
-        echo "        expected: 3dgs | baseline | moe | moe_gnn | moe_tree | tree_gnn"
+        echo "        expected: 3dgs | baseline | moe | moe_continue | moe_gnn | moe_tree | tree_gnn"
         exit 1 ;;
 esac
 
 if [[ -z "${data}" ]]; then
-    echo "Usage: bash train_method.sh --method <3dgs|baseline|moe|moe_gnn|moe_tree|tree_gnn> -d <dataset> -g <gpu>"
+    echo "Usage: bash train_method.sh --method <3dgs|baseline|moe|moe_continue|moe_gnn|moe_tree|tree_gnn> -d <dataset> -g <gpu>"
     exit 1
 fi
 
@@ -244,8 +257,8 @@ case "${method}" in
         ;;
 
     baseline)
-        echo "[method] baseline = Scaffold-GS (shared MLP)"
-        python train.py "${common_args[@]}" --num_experts 1
+        echo "[method] baseline = Scaffold-GS (shared MLP, mlp_depth=${mlp_depth})"
+        python train.py "${common_args[@]}" --num_experts 1 --mlp_depth "${mlp_depth}"
         ;;
 
     moe)
@@ -253,6 +266,23 @@ case "${method}" in
         python train.py "${common_args[@]}" \
             --num_experts "${num_experts}" \
             "${moe_loss_args[@]}"
+        ;;
+
+    moe_continue)
+        # Control: another 30k of flat MoE from a finished moe ckpt (keep points).
+        # Isolates "extra training" from the tree recipe (cf. ablate_grows0 / moe_tree).
+        resolve_moe_ckpt moe_continue
+        resolve_moe_ply moe_continue
+        keep_moe_points
+        echo "[method] moe_continue = flat MoE +30k from finished moe (no tree)"
+        echo "[from] MLPs   ${start_baseline_mlp}"
+        echo "[from] points ${start_gaussian_ply}"
+        python train.py "${common_args[@]}" \
+            --moe_arch flat \
+            --num_experts "${num_experts}" \
+            "${moe_loss_args[@]}" \
+            --start_baseline_mlp "${start_baseline_mlp}" \
+            --start_gaussian_ply "${start_gaussian_ply}"
         ;;
 
     moe_gnn)
@@ -273,6 +303,8 @@ case "${method}" in
 
     moe_tree)
         tree_extra=()
+        tree_force_args=()
+        [[ "${tree_grow_force}" -eq 1 ]] && tree_force_args+=(--tree_grow_force)
         if [[ "${warm_start_mode}" != "off" ]]; then
             resolve_moe_ckpt moe_tree
             resolve_moe_ply moe_tree
@@ -302,6 +334,7 @@ case "${method}" in
             --tree_grow_min_mass_frac "${tree_grow_min_mass_frac}" \
             --tree_grow_min_loss_ratio "${tree_grow_min_loss_ratio}" \
             --tree_grow_dense_iters "${tree_grow_dense_iters}" \
+            ${tree_force_args[@]+"${tree_force_args[@]}"} \
             ${tree_extra[@]+"${tree_extra[@]}"}
         ;;
 
@@ -309,6 +342,8 @@ case "${method}" in
         resolve_moe_ckpt tree_gnn
         resolve_moe_ply tree_gnn
         keep_moe_points
+        tree_force_args=()
+        [[ "${tree_grow_force}" -eq 1 ]] && tree_force_args+=(--tree_grow_force)
         echo "[method] tree_gnn = growing Tree MoE + GNN (start ${moe_branch_factor}, max_grows=${moe_max_total_grows}, max_leaves=${moe_max_leaves})"
         echo "[from] MLPs   ${start_baseline_mlp}"
         echo "[from] points ${start_gaussian_ply}"
@@ -331,6 +366,7 @@ case "${method}" in
             --tree_grow_min_mass_frac "${tree_grow_min_mass_frac}" \
             --tree_grow_min_loss_ratio "${tree_grow_min_loss_ratio}" \
             --tree_grow_dense_iters "${tree_grow_dense_iters}" \
+            ${tree_force_args[@]+"${tree_force_args[@]}"} \
             --start_baseline_mlp "${start_baseline_mlp}" \
             --start_gaussian_ply "${start_gaussian_ply}"
         ;;

@@ -1,211 +1,55 @@
+# Growing Tree MoE for Scaffold-GS
 
-<div align="center">
-  <h2>MoE-GS: Mixture of Experts for Dynamic Gaussian Splatting </h2>
-  <h3 style="font-size:1.5em; margin-top: 15px;"><strong style="letter-spacing: -0.5px">ICLR 2026</strong></h3>
-  <a href="https://arxiv.org/abs/2510.19210"><img src="https://img.shields.io/badge/arXiv-2510.19210-b31b1b" alt="arXiv"></a>
-  <a href="https://paper.pnu-cvsp.com/MoE-GS/"><img src="https://img.shields.io/badge/Project_Page-green" alt="Project Page"></a>
+Code release for our CVPR submission: a **Growing Tree Mixture-of-Experts** decoder for [Scaffold-GS](https://github.com/city-super/Scaffold-GS) attribute prediction (opacity / covariance / color).
 
-  <p>
-    <a href="https://www.pnu-cvsp.com/members/inhwan"><strong>In-Hwan Jin</strong></a><sup style="margin-right: -3px;">1*</sup>
-    ·  
-    <a href="https://www.pnu-cvsp.com/members/hyeong-ju"><strong>Hyeongju Mun</strong></a><sup style="margin-right: -3px;">1*</sup>
-    ·  
-    <strong>Joonsoo Kim</strong><sup style="margin-right: -3px;">2</sup>
-    ·    
-    <strong>Kugjin Yun</strong><sup style="margin-right: -3px;">2</sup>
-    ·  
-    <a href="https://www.pnu-cvsp.com/prof"><strong>Kyeongbo Kong</strong></a><sup style="margin-right: -3px;">1†</sup>
-    <br>
-    <sup style="margin-right: -3px;">1</sup> Pusan National University  <sup style="margin-left: 5px; margin-right: -3px;">2</sup> Electronics and Telecommunications Research Institute 
-    <br>
-    <sup>*</sup> Equal contribution &nbsp;&nbsp;&nbsp; <sup>†</sup> Corresponding author
-  </p>
-
-  <br>
-  <img src="main.gif" width=70%>
-  <br>
-  <b>Summary</b>: Unified <b>Mixture-of-Experts</b> framework for dynamic Gaussian Splatting with a
-            <b>volume-aware pixel router</b> for adaptive expert blending.
-</div>
-
-
-## Contents
-
-1. [Setup](#-Setup)
-2. [Preprocess Datasets](#-Preprocess-Datasets)
-3. [Stage 1: Expert Training](#-Stage-1)
-4. [Stage 2: Router Training](#-Stage-2)
-5. [BibTeX](#bibtex)
-
-<br><br>
+This repository contains the **training and rendering code** only. Paper sources, ablation plots, and internal analysis scripts are not included.
 
 ## Setup
 
-### Environment Setup
-Installation through pip is recommended. First, set up your Python environment:
-```shell
-conda create -n MoE-GS python=3.9
-conda activate MoE-GS
-```
-Make sure to install CUDA and PyTorch versions that match your CUDA environment. We've tested on NVIDIA RTX A6000 with PyTorch  version 2.0.1.
-Please refer https://pytorch.org/ for further information.
-
-```shell
-pip install torch
-```
-
-The remaining packages can be installed with:
-
-```shell
-pip install --upgrade setuptools cython wheel
+```bash
+conda create -n scaffold_gs python=3.11 -y
+conda activate scaffold_gs
+pip install torch torchvision  # match your CUDA
 pip install -r requirements.txt
 ```
 
-<br><br>
-
-## Preprocess Datasets
-
-For dataset preprocessing, we follow [STG](https://github.com/oppo-us-research/SpacetimeGaussians) for both the [N3V](https://github.com/facebookresearch/Neural_3D_Video) and Technicolor datasets.
-
-### Neural 3D Video Dataset
-First, download the dataset from [here](https://github.com/facebookresearch/Neural_3D_Video). You will need colmap environment for preprocess.
-To setup dataset preprocessing environment, run scrips:
-```shell
-./scripts/env_setup.sh
-```
-
-To preprocess dataset, run script:
-```shell
-./scripts/preprocess_all_n3v.sh <path to dataset>
-```
-
-### Technicolor dataset
-Download the dataset from [here](https://www.interdigital.com/data_sets/light-field-dataset).
-To setup dataset preprocessing environment, run scrips:
-
-```shell
-./scripts/preprocess_all_techni.sh <path to dataset>
-```
-
-Please refer [STG](https://github.com/oppo-us-research/SpacetimeGaussians.git) for further information.
-
-### Public Data (Scaffold / Tree-MoE experiments)
-
-The BungeeNeRF dataset is available in [Google Drive](https://drive.google.com/file/d/1nBLcf9Jrr6sdxKa1Hbd47IArQQ_X8lww/view?usp=sharing)/[百度网盘[提取码:4whv]](https://pan.baidu.com/s/1AUYUJojhhICSKO2JrmOnCA). The MipNeRF360 scenes are provided by the paper author [here](https://jonbarron.info/mipnerf360/). And we test on scenes ```bicycle, bonsai, counter, garden, kitchen, room, stump```. The SfM data sets for Tanks&Temples and Deep Blending are hosted by 3D-Gaussian-Splatting [here](https://repo-sam.inria.fr/fungraph/3d-gaussian-splatting/datasets/input/tandt_db.zip). Download and uncompress them into the ```data/``` folder.
-
-### Custom Data
-
-For custom data, you should process the image sequences with [Colmap](https://colmap.github.io/) to obtain the SfM points and camera poses. Then, place the results into ```data/``` folder.
-
-
-## Training (Scaffold / Tree-MoE)
+Build the differential Gaussian rasterizer submodule (same as Scaffold-GS):
 
 ```bash
-# Single scene
-bash train_method.sh --method 3dgs     -d mipnerf360/kitchen -g 0   # Kerbl et al. 2023
+pip install -e submodules/diff_gaussian_rasterization_df
+pip install -e submodules/simple-knn
+```
+
+Place datasets under `data/` (Mip-NeRF 360, Tanks & Temples, Deep Blending, NeRF-Synthetic, etc.).
+
+## Training
+
+Use `train_method.sh` to run the main recipes:
+
+```bash
+# Scaffold-GS baseline (shared MLP)
 bash train_method.sh --method baseline -d mipnerf360/kitchen -g 0
-bash train_method.sh --method moe      -d mipnerf360/kitchen -g 0
-bash train_method.sh --method moe_gnn  -d mipnerf360/kitchen -g 0   # needs moe
-bash train_method.sh --method moe_tree -d mipnerf360/kitchen -g 0   # needs moe
-bash train_method.sh --method tree_gnn -d mipnerf360/kitchen -g 0   # needs moe
 
-# Full suite (skip finished runs)
-bash sweep.sh --suite mip360 --skip-done -g 0
-bash sweep.sh --suite all --methods 3dgs --skip-done -g 0
-bash sweep.sh --suite mip360 --methods moe,moe_tree,moe_gnn,tree_gnn -g 0
+# Flat MoE (Stage A)
+bash train_method.sh --method moe -d mipnerf360/kitchen -g 0
+
+# Growing Tree MoE (Stage B; warm-starts from a finished flat MoE run)
+bash train_method.sh --method moe_tree -d mipnerf360/kitchen -g 0
 ```
 
-<br><br>
+Or call `train.py` directly. Checkpoints and logs are written under `outputs/`.
 
-## Stage 1: Expert Training
-We use **[Ex4DGS](https://github.com/juno181/Ex4DGS)**, **[E-D3DGS](https://github.com/JeongminB/E-D3DGS)**, **[4DGaussians](https://github.com/hustvl/4DGaussians)**, and **[STG](https://github.com/oppo-us-research/SpacetimeGaussians)** as candidate experts for **MoE-GS**.  
-All experts are pretrained using their original configurations, except for **STG**.  
-For **STG** on N3V Dataset, we split the frames into **0–149** and **150–299** to handle GPU memory limits,  
-and modify the **feature splatting** process to use **spherical harmonics (SHs)** with the **Ex4DGS rasterizer**.
+## Evaluation
 
-### STG Model Directory Structure
-
-The pretrained **STG** models are organized as follows:
-```
-<Path to STG model>
-|---<scene>/
-|   |---<scene>_0to149/
-|   |---<scene>_150to299/
+```bash
+python render.py -m outputs/<dataset>/<method>/<timestamp>
+python metrics.py -m outputs/<dataset>/<method>/<timestamp>
 ```
 
-<br>
+## Citation
 
-## Stage 2: Router Training
+If you use this code, please cite our paper (bibtex will be added upon acceptance / arXiv).
 
-### N3V Dataset
+## Acknowledgments
 
-You can train MoE-GS(n=3,4) by running the following command:
-
-```
-python train_E4.py --config "configs/N3V/<scene>.json" \
-    --source_path <location>/<scene> \
-    --model_path <path to Ex4DGS model>/<scene> \
-    --emb_path <path to E-D3DGS model>/<scene> \
-    --stg_path <path to STG model>/<scene> \
-    --fgaussian_path <path to 4DGaussians model>/<scene> \
-    --save_path <path to save model>
-
-python train_E3.py --config "configs/N3V/<scene>.json" \
-    --source_path <location>/<scene> \
-    --model_path <path to Ex4DGS model>/<scene> \
-    --emb_path <path to E-D3DGS model>/<scene> \
-    --fgaussian_path <path to 4DGaussians model>/<scene> \
-    --save_path <path to save model>
-```
-
-You can render MoE-GS(n=3,4) by running the following command:
-```
-
-python render_E4.py --skip_train \
-    --source_path <location>/<scene> \
-    --save_path <path to save model> \
-    --iteration <2000|5000>
-
-python render_E3.py --skip_train \
-    --source_path <location>/<scene> \
-    --save_path <path to save model> \
-    --iteration <2000|5000>
-```
-
-### Technicolor Dataset
-You can train MoE-GS(n=3) by running the following command:
-
-```
-
-python train_E3_tech.py --config "configs/techni/<scene>.json" \
-    --source_path <location>/<scene> \
-    --model_path <path to Ex4DGS model>/<scene> \
-    --emb_path <path to E-D3DGS model>/<scene> \
-    --stg_path <path to STG model>/<scene> \
-    --save_path <path to save model>
-```
-
-You can render MoE-GS(n=3) by running the following command:
-
-```
-python render_E3_tech.py --skip_train \
-    --source_path <location>/<scene> \
-    --save_path <path to save model> \
-    --iteration <2000|5000>
-```
-
-**Options:**
-- `--y_offset` Vertical offset for viewpoint shifting (used for N3V).  
-- `--focal_mm` Camera focal length in millimeters (used for Technicolor).
-
-<br>
-
-## BibTeX
-```bibtex
-@inproceedings{jinmoe,
-    title={MoE-{GS}: Mixture of Experts for Dynamic Gaussian Splatting},
-    author={In-Hwan Jin and Hyeongju Mun and Joonsoo Kim and Kugjin Yun and Kyeongbo Kong},
-    booktitle={The Fourteenth International Conference on Learning Representations},
-    year={2026},
-}
-```
+Built on [Scaffold-GS](https://github.com/city-super/Scaffold-GS) and [3D Gaussian Splatting](https://github.com/graphdeco-inria/gaussian-splatting).

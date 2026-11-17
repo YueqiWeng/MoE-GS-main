@@ -16,7 +16,7 @@ import json
 from scene.cameras import MiniCam
 
 host = "127.0.0.1"
-port = 9898
+port = 6009
 
 conn = None
 addr = None
@@ -37,7 +37,7 @@ def try_connect():
         conn, addr = listener.accept()
         print(f"\nConnected by {addr}")
         conn.settimeout(None)
-    except (ConnectionError, OSError) as inst:
+    except Exception as inst:
         pass
             
 def read():
