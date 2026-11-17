@@ -5,6 +5,8 @@
 
 # --- Paper / analysis (never publish) ---
 documents/
+SETUP_UV.md
+THIRDPARTY_RECOVERY.md
 *.tex
 *.bib
 *.aux
