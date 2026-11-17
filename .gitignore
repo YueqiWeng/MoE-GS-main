@@ -169,3 +169,25 @@ db.sqlite3-journal
 submodules/diff_gaussian_rasterization_df/third_party/glm/doc/
 submodules/diff_gaussian_rasterization_df/third_party/glm/.github/
 submodules/diff_gaussian_rasterization_df/third_party/glm/test/
+
+# --- Public-release hygiene ---
+
+# CUDA extensions: install from upstream; do not vendor in this repo
+submodules/
+.gitmodules
+SIBR_viewers/
+third_party/
+thirdparty/
+ply_io/
+
+# Local clutter that must never reappear on GitHub
+configs/
+scripts_MoE-GS/
+.moe_gs_aside/
+main.gif
+helper_model.py
+m_psnr.py
+train_E*.py
+render_E*.py
+sweep.sh
+sweep_logs/
